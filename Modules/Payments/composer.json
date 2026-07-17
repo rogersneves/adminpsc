@@ -1,0 +1,30 @@
+{
+    "name": "adminpsc/payments",
+    "description": "",
+    "authors": [
+        {
+            "name": "AdminPSC",
+            "email": "dev@adminpsc.local"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Payments\\": "app/",
+            "Modules\\Payments\\Database\\Factories\\": "database/factories/",
+            "Modules\\Payments\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Payments\\Tests\\": "tests/"
+        }
+    }
+}

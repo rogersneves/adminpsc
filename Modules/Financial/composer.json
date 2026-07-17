@@ -1,0 +1,30 @@
+{
+    "name": "adminpsc/financial",
+    "description": "",
+    "authors": [
+        {
+            "name": "AdminPSC",
+            "email": "dev@adminpsc.local"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Financial\\": "app/",
+            "Modules\\Financial\\Database\\Factories\\": "database/factories/",
+            "Modules\\Financial\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Financial\\Tests\\": "tests/"
+        }
+    }
+}

@@ -1,0 +1,30 @@
+{
+    "name": "adminpsc/medicalrecords",
+    "description": "",
+    "authors": [
+        {
+            "name": "AdminPSC",
+            "email": "dev@adminpsc.local"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\MedicalRecords\\": "app/",
+            "Modules\\MedicalRecords\\Database\\Factories\\": "database/factories/",
+            "Modules\\MedicalRecords\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\MedicalRecords\\Tests\\": "tests/"
+        }
+    }
+}

@@ -1,0 +1,30 @@
+{
+    "name": "adminpsc/security",
+    "description": "",
+    "authors": [
+        {
+            "name": "AdminPSC",
+            "email": "dev@adminpsc.local"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Security\\": "app/",
+            "Modules\\Security\\Database\\Factories\\": "database/factories/",
+            "Modules\\Security\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Security\\Tests\\": "tests/"
+        }
+    }
+}

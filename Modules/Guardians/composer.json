@@ -1,0 +1,30 @@
+{
+    "name": "adminpsc/guardians",
+    "description": "",
+    "authors": [
+        {
+            "name": "AdminPSC",
+            "email": "dev@adminpsc.local"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Guardians\\": "app/",
+            "Modules\\Guardians\\Database\\Factories\\": "database/factories/",
+            "Modules\\Guardians\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Guardians\\Tests\\": "tests/"
+        }
+    }
+}

@@ -1,0 +1,11 @@
+{
+    "name": "Psychologists",
+    "alias": "psychologists",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Psychologists\\Providers\\PsychologistsServiceProvider"
+    ],
+    "files": []
+}

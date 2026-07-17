@@ -1,0 +1,20 @@
+{
+    "Core": true,
+    "Tenant": true,
+    "Authentication": true,
+    "Authorization": true,
+    "Users": true,
+    "Psychologists": true,
+    "Patients": true,
+    "Guardians": true,
+    "Scheduling": true,
+    "MedicalRecords": true,
+    "Financial": true,
+    "Payments": true,
+    "Reports": true,
+    "Notifications": true,
+    "CMS": true,
+    "Audit": true,
+    "Security": true,
+    "Settings": true
+}

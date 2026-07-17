@@ -1,0 +1,30 @@
+{
+    "name": "adminpsc/psychologists",
+    "description": "",
+    "authors": [
+        {
+            "name": "AdminPSC",
+            "email": "dev@adminpsc.local"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Psychologists\\": "app/",
+            "Modules\\Psychologists\\Database\\Factories\\": "database/factories/",
+            "Modules\\Psychologists\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Psychologists\\Tests\\": "tests/"
+        }
+    }
+}

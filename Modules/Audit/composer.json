@@ -1,0 +1,30 @@
+{
+    "name": "adminpsc/audit",
+    "description": "",
+    "authors": [
+        {
+            "name": "AdminPSC",
+            "email": "dev@adminpsc.local"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Audit\\": "app/",
+            "Modules\\Audit\\Database\\Factories\\": "database/factories/",
+            "Modules\\Audit\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Audit\\Tests\\": "tests/"
+        }
+    }
+}

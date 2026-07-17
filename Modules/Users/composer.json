@@ -1,0 +1,30 @@
+{
+    "name": "adminpsc/users",
+    "description": "",
+    "authors": [
+        {
+            "name": "AdminPSC",
+            "email": "dev@adminpsc.local"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Users\\": "app/",
+            "Modules\\Users\\Database\\Factories\\": "database/factories/",
+            "Modules\\Users\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Users\\Tests\\": "tests/"
+        }
+    }
+}

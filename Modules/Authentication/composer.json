@@ -1,0 +1,30 @@
+{
+    "name": "adminpsc/authentication",
+    "description": "",
+    "authors": [
+        {
+            "name": "AdminPSC",
+            "email": "dev@adminpsc.local"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Authentication\\": "app/",
+            "Modules\\Authentication\\Database\\Factories\\": "database/factories/",
+            "Modules\\Authentication\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Authentication\\Tests\\": "tests/"
+        }
+    }
+}

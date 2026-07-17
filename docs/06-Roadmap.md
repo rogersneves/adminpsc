@@ -1,0 +1,90 @@
+# 06 - Roadmap
+
+Cada fase pressupõe a anterior concluída e testada (PHPUnit). Antes de iniciar qualquer fase, reavaliar
+impacto arquitetural, de segurança, LGPD/CFP, desempenho e escalabilidade (ver Diretrizes Finais do
+prompt mestre do projeto).
+
+## Fase 0 — Fundação (esta entrega)
+Documentos de arquitetura (`docs/`), scaffold Laravel 13 + Inertia v2 + React 19 + Tailwind v4 +
+shadcn/ui, `nwidart/laravel-modules` com os 18 módulos criados como esqueleto, `spatie/laravel-permission`
+instalado (sem dados), configuração de ambiente (MySQL, fila database).
+
+## Fase 1 — Core, Tenant, Authentication, Authorization
+- Migrations e Model de `Tenant`, `TenantScope`, middleware de resolução de tenant.
+- Fluxo de autenticação completo (login, registro, recuperação de senha) com MFA obrigatório
+  (OTP e-mail + TOTP) em todo novo login.
+- Papéis e permissões seed (Super Admin, Admin da Clínica, Psicólogo, Secretária, Financeiro, Paciente,
+  Responsável Legal) e Policies base.
+- Política de sessão (timeout absoluto + inatividade).
+- Módulo `Audit`: Event/Listener genérico de auditoria imutável, cobrindo login/logout/falha de auth
+  desde já.
+
+## Fase 2 — Users, Psychologists, Patients, Guardians
+- Cadastro de paciente (obrigatórios: e-mail, confirmação, senha, confirmação, nome de identificação).
+- Campos opcionais pós-primeiro-acesso (CPF, telefones, contatos de recado, endereço, nascimento).
+- Cadastro de responsável legal, obrigatório quando paciente menor de 16 anos.
+- Cadastro profissional do psicólogo.
+- Envelope encryption (Master Key/DEK) implementado e aplicado a todo PII sensível dessas entidades.
+
+## Fase 3 — Scheduling
+- Definição de disponibilidade do psicólogo (dias, horários, duração padrão, intervalos, férias,
+  bloqueios, feriados, horários particulares).
+- Reserva de horário pelo paciente restrita à disponibilidade publicada.
+- Bloqueio transacional contra dupla reserva (lock a nível de transação no MySQL).
+- Lista de espera.
+- Cancelamento/reagendamento respeitando antecedência mínima configurável (padrão 24h).
+- Status de sessão (agendada, confirmada, realizada, cancelada, reagendada, não compareceu).
+
+## Fase 4 — MedicalRecords
+- Prontuário separado do cadastro, com versionamento completo (nunca sobrescreve).
+- Conteúdo (anotações, objetivos terapêuticos, plano terapêutico, anexos) cifrado com a mesma
+  arquitetura de envelope encryption.
+- Policies restringindo acesso ao psicólogo responsável (e papéis administrativos quando aplicável).
+
+## Fase 5 — Financial, Payments
+- Modelagem Sessão → Cobrança → Pagamento.
+- Parcelamento, descontos, multas, juros, abatimentos, estornos.
+- Status de cobrança (em aberto, pago, vencido, parcial, cancelado, estornado).
+- Arquitetura preparada para gateways/PIX (interface `PaymentGatewayInterface` no módulo `Payments`,
+  sem integração real ainda).
+
+## Fase 6 — Reports, Dashboards
+- Relatórios do psicólogo (filtros por período/paciente/situação financeira/sessões/comparecimento),
+  exportação PDF (`barryvdh/laravel-dompdf`) e Excel (`maatwebsite/excel`).
+- Relatórios do paciente (sessões, situação financeira, recibos).
+- Dashboards do psicólogo (agenda do dia/semana, receitas, pendências, pacientes ativos/inativos,
+  aniversariantes, indicadores gerais) e do paciente (próxima sessão, pendências, histórico, atalhos).
+
+## Fase 7 — Notifications
+- Notificações automáticas: confirmação de cadastro/e-mail, lembrete de sessão, cancelamento,
+  reagendamento, confirmação de pagamento, cobrança, recibos, alterações importantes.
+- Arquitetura de canal plugável, preparada para SMS/WhatsApp futuros sem refatorar o módulo.
+
+## Fase 8 — CMS
+- Páginas públicas editáveis via GrapesJS (`grapesjs-preset-newsletter` como base), interface
+  customizada para aparência clean.
+- Componentes próprios: Banner, Hero, Cards, FAQ, Rodapé, Formulários, Botões, Depoimentos, Contato.
+- Sem edição manual de HTML pelo usuário final.
+
+## Fase 9 — Audit/Security hardening
+- Revisão completa de cobertura de auditoria (todas as ações obrigatórias do prompt mestre).
+- Rotação de chaves de criptografia em produção (Job agendado), métricas de autenticação e filas.
+- Cabeçalhos de segurança, rate limiting revisado, testes de concorrência adicionais.
+
+## Fase 10 — LGPD
+- Fluxo completo de consentimento, política de privacidade e termos versionados com histórico de
+  aceite, anonimização e exclusão conforme legislação e normas do CFP.
+
+## Fase 11 — Produtização SaaS
+- Onboarding de novo tenant, planos/billing, personalização por tenant (tema, configurações),
+  eventual caminho de isolamento físico de dados para tenants grandes (reavaliação do ADR-003 de
+  `01-Arquitetura.md`).
+
+## Marcos futuros (fora de fases numeradas, mantidos como visão)
+- Múltiplos psicólogos por clínica, múltiplas unidades, secretárias com escopo próprio.
+- Convênios, teleconsulta, assinatura eletrônica, emissão de notas fiscais.
+- Gateways de pagamento reais e PIX.
+- Aplicativo móvel.
+- API pública REST (o desacoplamento Actions/Services já feito desde a Fase 0 evita refatoração
+  significativa quando isso for priorizado).
+- SMS e WhatsApp como canais de notificação adicionais.
