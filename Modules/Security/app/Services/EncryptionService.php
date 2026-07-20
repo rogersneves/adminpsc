@@ -57,6 +57,20 @@ class EncryptionService
         ]);
     }
 
+    /**
+     * Hash determinístico para busca exata sobre campo cifrado (ex.: CPF), sem expor
+     * texto puro nem depender do texto cifrado (que é não-determinístico por nonce).
+     * A normalização do valor (ex.: só dígitos do CPF) é responsabilidade de quem chama.
+     *
+     * @see docs/02-Banco-de-Dados.md "Estratégia de campo pesquisável híbrido"
+     */
+    public function searchHash(string $normalizedValue, string $context): string
+    {
+        $indexingKey = hash_hmac('sha256', "search-index:{$context}", $this->masterKey(), binary: true);
+
+        return hash_hmac('sha256', $normalizedValue, $indexingKey);
+    }
+
     public function decrypt(string $bundle, string $context, ?string $tenantId = null): string
     {
         $parts = explode('.', $bundle);

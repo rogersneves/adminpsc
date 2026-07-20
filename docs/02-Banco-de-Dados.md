@@ -33,24 +33,31 @@ Papéis/permissões: tabelas padrão do `spatie/laravel-permission` (`roles`, `p
 `model_has_roles`, `model_has_permissions`, `role_has_permissions`), com `roles.tenant_id` nullable
 para permitir papéis globais (Super Admin) e papéis por tenant.
 
-### `psychologists`
-`id (uuid, pk)`, `tenant_id`, `user_id (fk users)`, `professional_registry` (CRP, cifrado),
-`specialties (json)`, `default_session_duration_minutes`, `created_at`, `updated_at`, `deleted_at`.
+### `psychologists` (implementado na Fase 2)
+`id (uuid, pk)`, `tenant_id`, `user_id (fk users)`, `professional_registry_encrypted` (CRP, cifrado via
+`EnvelopeEncrypted`), `specialties (json, não sensível — sem cifra)`, `default_session_duration_minutes`
+(default 50), `created_at`, `updated_at`, `deleted_at`.
 
-### `patients`
+### `patients` (implementado na Fase 2)
 `id (uuid, pk)`, `tenant_id`, `user_id (fk users, nullable até o paciente ativar conta)`,
-`display_name`, `email`, `email_verified_at`,
-campos opcionais pós-primeiro-acesso (todos cifrados quando sensíveis): `document_number_encrypted`,
+`display_name`, `email`,
+campos opcionais pós-primeiro-acesso (cifrados via `EnvelopeEncrypted`/`EncryptedJson`, ver
+`04-Seguranca.md` e `EncryptedJson` para os campos estruturados): `document_number_encrypted`,
 `document_number_hash` (HMAC determinístico para busca exata — ver Estratégia de campo pesquisável),
-`birth_date_encrypted`, `phones (json, cifrado)`, `emergency_contacts (json, cifrado)`,
-`address_encrypted`, `created_at`, `updated_at`, `deleted_at`.
+`birth_date_encrypted`, `phones_encrypted` (json serializado antes de cifrar),
+`emergency_contacts_encrypted` (idem), `address_encrypted`, `created_at`, `updated_at`, `deleted_at`.
+Nota: `email_verified_at` não existe em `patients` — vive em `users` (o paciente é um `User` com papel
+`paciente`; `Patient` é o perfil de domínio, não a conta de autenticação).
 
-### `guardians`
+### `guardians` (implementado na Fase 2)
 `id (uuid, pk)`, `tenant_id`, `patient_id (fk patients)`, `name`, `document_number_encrypted`,
-`document_number_hash`, `email`, `phone_encrypted`, `address_encrypted`, `relationship` (enum:
-mãe, pai, tutor, outro), `created_at`, `updated_at`, `deleted_at`.
-Regra de negócio (não de schema): obrigatório ter ao menos 1 `guardian` ativo quando
-`patients.birth_date` implica idade < 16 anos — validado em `Patients`/`Guardians` Rules, não em
+`document_number_hash`, `email`, `phone_encrypted`, `address_encrypted`, `relationship` (string curta:
+mae/pai/tutor/outro — sem `user_id`, sem login, é só um registro de contato/legal, ver
+`01-Arquitetura.md`), `created_at`, `updated_at`, `deleted_at`.
+Regra de negócio (não de schema): obrigatório ter ao menos 1 `guardian` cadastrado quando a idade
+calculada a partir de `patients.birth_date_encrypted` for < 16 anos — validado por
+`Modules\Guardians\Rules\PatientRequiresGuardianIfMinor` no momento em que a data de nascimento é
+gravada/alterada (o campo é opcional e não existe no cadastro inicial), não em
 constraint de banco.
 
 ### `psychologist_availabilities`

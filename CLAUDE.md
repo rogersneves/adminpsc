@@ -98,8 +98,12 @@ or in React components.**
 Scopes\TenantScope`) on every Model using `Modules\Tenant\Traits\BelongsToTenant` (ADR-003). Middleware
 `resolve.tenant` populates the `Modules\Tenant\Support\CurrentTenant` singleton after `auth`. **`User`
 deliberately does not use `BelongsToTenant`** — login must find a user by email before any tenant is
-resolved; see the note in `docs/01-Arquitetura.md`. No business Model uses the strict scope yet (nothing
-exists to scope until Fase 2's `Patient` etc.) — the trait/scope/middleware are built and ready.
+resolved; see the note in `docs/01-Arquitetura.md`. `Patient`, `Guardian`, and `Psychologist` (Fase 2) are
+the first real consumers of the strict scope — **every route that touches one of these models MUST
+include `resolve.tenant` in its middleware, or it 500s in real usage** (see the gotcha below — PHPUnit
+will not catch a missing `resolve.tenant`, only manual/browser testing will).
+`tenant_id` is in each model's `$fillable` (same precedent as `User`) — safe here because every Action in
+this codebase builds explicit attribute arrays and never forwards raw request input into `create()`.
 
 **RBAC:** `spatie/laravel-permission`, seeded via `Modules\Authorization\Database\Seeders\
 RolesAndPermissionsSeeder` (called from `DatabaseSeeder`). 7 roles: `super_admin`, `admin_clinica`,
@@ -118,10 +122,26 @@ EnsureSessionIsValid` (global `web` middleware, config in `config/security.php`)
 end-to-end by `tests/Feature/Authentication/*` and `tests/Feature/Tenant/ResolveTenantTest.php`.
 
 **Envelope encryption:** `Modules\Security\Services\EncryptionService` (AES-256-GCM, Master Key wraps a
-per-context DEK stored in `encryption_keys`). Reusable Eloquent cast: `Modules\Security\Casts\
-EnvelopeEncrypted::class.':context-name'` — currently used for `User::mfa_totp_secret`, meant to be
-reused for PII fields in Fase 2. Full key rotation/versioning is still Fase 9 — this phase only has a
-single active DEK per context.
+per-context DEK stored in `encryption_keys`). Two reusable Eloquent casts:
+`Modules\Security\Casts\EnvelopeEncrypted::class.':context-name'` for scalar strings (used by
+`User::mfa_totp_secret`, `Patient`/`Guardian` CPF/address/birth_date, `Psychologist` CRP), and
+`Modules\Security\Casts\EncryptedJson::class.':context-name'` for structured values (`Patient::phones`,
+`Patient::emergency_contacts` — serializes to JSON, then encrypts). Exact-match search on an encrypted
+field (e.g. find a patient by CPF) uses `EncryptionService::searchHash()` — an HMAC-SHA256 keyed off the
+Master Key, stored in a sibling `*_hash` column, never a `LIKE` on ciphertext or plaintext. Full key
+rotation/versioning is still Fase 9 — this phase only has a single active DEK per context.
+
+**Patients/Psychologists/Guardians (Fase 2, done):** patient self-registers under a specific clinic via
+`GET/POST /c/{tenant:slug}/paciente/registro` (tenant resolved by **route-model-binding on `slug`**, not
+by the `resolve.tenant` middleware — there's no authenticated user yet to resolve a tenant from). Same
+"auto-login without MFA, gated by `verified`" pattern as clinic admin registration. Optional profile
+fields (CPF, phone, address, birth date, emergency contacts) go through `GET/PUT /paciente/perfil`
+(`Modules\Patients\Http\Controllers\PatientProfileController`); submitting a `birth_date` that implies
+age < 16 requires a guardian — either already on file or included in the same request's `guardians[]`
+array — enforced by `Modules\Guardians\Rules\PatientRequiresGuardianIfMinor`. Guardians are contact-only
+records (no `user_id`, no login — the `responsavel_legal` role stays seeded but unused). Psychologists are
+created by `admin_clinica`/`super_admin` (`POST /psicologos`, gated by the existing `manage-users`
+permission — no new permission needed), which sends a password-reset link instead of a temporary password.
 
 **Frontend:** Inertia pages live in `resources/js/Pages` (root) or `Modules/{Name}/resources/js/Pages`
 (per module). shadcn/ui components are copied into `resources/js/components/ui` (lowercase, per the
@@ -162,18 +182,47 @@ back to v2. Flagged here in case there was a specific reason v2 was required.
 - **`route()` / Ziggy is not installed.** Auth pages use plain path strings (`post('/login')`, etc.), not
   a `route()` JS helper. Don't reach for `route()` in a new page without installing `tightenco/ziggy` first.
 
+## Gotchas hit during Fase 2
+
+- **`app()->runningInConsole()` is `true` during every PHPUnit run** (Laravel's `isRunningUnitTests()`
+  feeds into it), which makes `TenantScope`'s "skip the scope in console" branch fire on every test —
+  including `$this->get(...)`/`$this->post(...)` feature-test HTTP calls. This means **a route missing
+  `resolve.tenant` in its middleware will pass every PHPUnit test and still 500 in the real app** the
+  moment it touches a `BelongsToTenant` model, because `CurrentTenant` was never populated. This exact bug
+  shipped once (`/paciente/perfil` routes) and only the manual `php artisan serve` smoke test caught it —
+  the 36-test suite was green the whole time. **When adding a route that touches `Patient`, `Guardian`,
+  `Psychologist`, or any future `BelongsToTenant` model, always add `resolve.tenant` to its middleware AND
+  do a manual smoke test — don't trust the test suite alone for this specific class of bug.**
+- **A model's `$fillable` array silently drops keys it doesn't list — including ones you pass explicitly
+  in `create([...])`.** `tenant_id` was missing from `Patient`/`Guardian`/`Psychologist::$fillable`;
+  `Model::create(['tenant_id' => $tenant->id, ...])` silently ignored it, and `BelongsToTenant`'s
+  creating-hook fallback (pull from `CurrentTenant`) only saves you if a tenant is already resolved — it
+  isn't, during guest routes like patient registration. Fixed by adding `tenant_id` to `$fillable`
+  (same precedent as `User`), which is safe here specifically because every Action in this codebase
+  builds explicit attribute arrays rather than forwarding `$request->all()`/`->validated()` wholesale into
+  `create()`. If that stops being true anywhere, mass-assignable `tenant_id` becomes a real risk again.
+- **The base `App\Http\Controllers\Controller` ships empty in this Laravel version** — no
+  `AuthorizesRequests`, no `ValidatesRequests`. `$this->authorize(...)` inside a controller throws
+  "Call to undefined method" until you add `use Illuminate\Foundation\Auth\Access\AuthorizesRequests;`
+  to that base class (already done). Don't re-add it per-controller.
+
 ## What exists vs. what doesn't yet
 
-**Done (Fase 0 + Fase 1):** Laravel + Inertia + React + Tailwind + shadcn/ui wiring; the 18 module
-skeletons; `Tenant` model/scope/middleware; full registration → email verification → login → MFA
+**Done (Fase 0 + Fase 1 + Fase 2):** Laravel + Inertia + React + Tailwind + shadcn/ui wiring; the 18
+module skeletons; `Tenant` model/scope/middleware; full registration → email verification → login → MFA
 (email OTP + TOTP) → session-timeout-guarded dashboard flow (`Modules\Authentication`); envelope
-encryption primitive (`Modules\Security`); RBAC seeded (`Modules\Authorization`); immutable audit log
-wired to Laravel's native auth events (`Modules\Audit`). 26 PHPUnit tests, plus a manual end-to-end pass
-against real MySQL.
+encryption primitives (`EnvelopeEncrypted`, `EncryptedJson`, `searchHash`, all in `Modules\Security`);
+RBAC seeded (`Modules\Authorization`); immutable audit log wired to Laravel's native auth events
+(`Modules\Audit`); tenant-scoped patient self-registration + optional-profile-with-guardian-rule
+(`Modules\Patients`, `Modules\Guardians`); admin-created psychologist accounts (`Modules\Psychologists`).
+36 PHPUnit tests, plus two manual end-to-end passes against real MySQL (one per phase — both caught real
+bugs PHPUnit missed, see the gotchas sections above).
 
-**Not built yet:** everything business-domain (Psychologists, Patients, Guardians, Scheduling,
-MedicalRecords, Financial, Payments, Reports, Notifications, CMS, Settings) — those are Fase 2 onward in
-`docs/06-Roadmap.md`, re-evaluate architectural/security/LGPD impact before starting each one.
+**Not built yet:** Scheduling, MedicalRecords, Financial, Payments, Reports, Notifications, CMS,
+Settings — those are Fase 3 onward in `docs/06-Roadmap.md`, re-evaluate architectural/security/LGPD
+impact before starting each one. Also not built: admin-facing patient list/management UI, psychologist
+profile editing, Secretária/Financeiro staff invites, guardian portal access — all explicitly deferred,
+see the Fase 2 entry in `docs/06-Roadmap.md` for the reasoning.
 
 Also not yet in place: `lang/` translation files and the React `t()`/`useTranslation` hook described in
 `docs/05-UIUX-Design-System.md` (pages currently hardcode Portuguese text as a placeholder — don't copy

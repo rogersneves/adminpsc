@@ -2,8 +2,11 @@
 
 namespace Modules\Psychologists\Providers;
 
+use Illuminate\Support\Facades\Gate;
 use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
+use Modules\Psychologists\Models\Psychologist;
+use Modules\Psychologists\Policies\PsychologistPolicy;
 
 class PsychologistsServiceProvider extends ModuleServiceProvider
 {
@@ -34,9 +37,16 @@ class PsychologistsServiceProvider extends ModuleServiceProvider
         RouteServiceProvider::class,
     ];
 
+    public function boot(): void
+    {
+        parent::boot();
+
+        Gate::policy(Psychologist::class, PsychologistPolicy::class);
+    }
+
     /**
      * Define module schedules.
-     * 
+     *
      * @param $schedule
      */
     // protected function configureSchedules(Schedule $schedule): void

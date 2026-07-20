@@ -25,13 +25,24 @@ instalado (sem dados), configuração de ambiente (MySQL, fila database).
   sessão configurável por tenant (depende do módulo Settings), tela de Super Admin, QR Code visual no
   setup de TOTP (hoje mostra secret + URI em texto).
 
-## Fase 2 — Users, Psychologists, Patients, Guardians
-- Cadastro de paciente (obrigatórios: e-mail, confirmação, senha, confirmação, nome de identificação).
-- Campos opcionais pós-primeiro-acesso (CPF, telefones, contatos de recado, endereço, nascimento).
-- Cadastro de responsável legal, obrigatório quando paciente menor de 16 anos.
-- Cadastro profissional do psicólogo.
-- PII sensível dessas entidades cifrada reaproveitando `Modules\Security\Casts\EnvelopeEncrypted` (já
-  implementado na Fase 1) — só falta o versionamento avançado/rotação, que é da Fase 9.
+## Fase 2 — Users, Psychologists, Patients, Guardians (concluída)
+- Cadastro de paciente sob uma clínica específica (`/c/{tenant:slug}/paciente/registro`): obrigatórios
+  e-mail, senha+confirmação, nome de identificação; confirmação de e-mail via link (mesmo padrão da
+  Fase 1), não um segundo campo de digitar o e-mail.
+- Campos opcionais pós-primeiro-acesso (CPF, telefones, contatos de recado, endereço, nascimento) via
+  `GET/PUT /paciente/perfil`, cifrados com `EnvelopeEncrypted`/`EncryptedJson`.
+- Cadastro de responsável legal (só registro de contato, sem login) obrigatório quando a idade calculada
+  a partir da data de nascimento é menor que 16 — validado no momento em que a data é gravada/alterada,
+  via `PatientRequiresGuardianIfMinor`.
+- Cadastro profissional do psicólogo pelo Admin da Clínica (`POST /psicologos`), não autocadastro —
+  reaproveita o broker de redefinição de senha do Laravel em vez de senha temporária.
+- `TenantScope`/`BelongsToTenant` (construídos sem uso na Fase 1) exercitados pela primeira vez em
+  Models de negócio reais; hash de busca (`EncryptionService::searchHash`) permite localizar paciente
+  por CPF sem guardar texto puro.
+- **Pendências explícitas desta fase, não bloqueantes:** convite de Secretária/Financeiro; tela
+  administrativa de listar/editar/desativar pacientes; edição de perfil de psicólogo após criado; portal
+  do responsável legal (papel `responsavel_legal` seguirá seedado sem uso); rotação/versionamento
+  avançado de chave de criptografia (Fase 9).
 
 ## Fase 3 — Scheduling
 - Definição de disponibilidade do psicólogo (dias, horários, duração padrão, intervalos, férias,
