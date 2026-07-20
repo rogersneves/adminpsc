@@ -2,8 +2,12 @@
 
 namespace Modules\Authorization\Providers;
 
+use Illuminate\Support\Facades\Gate;
 use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
+use Modules\Authorization\Console\Commands\MakeSuperAdminCommand;
+use Modules\Authorization\Policies\UserPolicy;
+use Modules\Users\Models\User;
 
 class AuthorizationServiceProvider extends ModuleServiceProvider
 {
@@ -22,7 +26,9 @@ class AuthorizationServiceProvider extends ModuleServiceProvider
      *
      * @var string[]
      */
-    // protected array $commands = [];
+    protected array $commands = [
+        MakeSuperAdminCommand::class,
+    ];
 
     /**
      * Provider classes to register.
@@ -33,6 +39,15 @@ class AuthorizationServiceProvider extends ModuleServiceProvider
         EventServiceProvider::class,
         RouteServiceProvider::class,
     ];
+
+    public function boot(): void
+    {
+        parent::boot();
+
+        // Descoberta automática de Policy não funciona entre módulos diferentes
+        // (User está em Modules\Users, UserPolicy em Modules\Authorization).
+        Gate::policy(User::class, UserPolicy::class);
+    }
 
     /**
      * Define module schedules.

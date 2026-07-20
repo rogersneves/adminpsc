@@ -4,6 +4,7 @@ namespace Modules\Security\Providers;
 
 use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
+use Modules\Security\Console\Commands\GenerateMasterKeyCommand;
 
 class SecurityServiceProvider extends ModuleServiceProvider
 {
@@ -22,7 +23,9 @@ class SecurityServiceProvider extends ModuleServiceProvider
      *
      * @var string[]
      */
-    // protected array $commands = [];
+    protected array $commands = [
+        GenerateMasterKeyCommand::class,
+    ];
 
     /**
      * Provider classes to register.

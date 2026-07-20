@@ -4,27 +4,34 @@ Cada fase pressupõe a anterior concluída e testada (PHPUnit). Antes de iniciar
 impacto arquitetural, de segurança, LGPD/CFP, desempenho e escalabilidade (ver Diretrizes Finais do
 prompt mestre do projeto).
 
-## Fase 0 — Fundação (esta entrega)
-Documentos de arquitetura (`docs/`), scaffold Laravel 13 + Inertia v2 + React 19 + Tailwind v4 +
+## Fase 0 — Fundação (concluída)
+Documentos de arquitetura (`docs/`), scaffold Laravel 13 + Inertia v3 + React 19 + Tailwind v4 +
 shadcn/ui, `nwidart/laravel-modules` com os 18 módulos criados como esqueleto, `spatie/laravel-permission`
 instalado (sem dados), configuração de ambiente (MySQL, fila database).
 
-## Fase 1 — Core, Tenant, Authentication, Authorization
-- Migrations e Model de `Tenant`, `TenantScope`, middleware de resolução de tenant.
-- Fluxo de autenticação completo (login, registro, recuperação de senha) com MFA obrigatório
-  (OTP e-mail + TOTP) em todo novo login.
-- Papéis e permissões seed (Super Admin, Admin da Clínica, Psicólogo, Secretária, Financeiro, Paciente,
-  Responsável Legal) e Policies base.
-- Política de sessão (timeout absoluto + inatividade).
-- Módulo `Audit`: Event/Listener genérico de auditoria imutável, cobrindo login/logout/falha de auth
-  desde já.
+## Fase 1 — Core, Tenant, Authentication, Authorization, Audit (concluída)
+- Migration e Model de `Tenant`, `TenantScope`, `BelongsToTenant`, middleware `ResolveTenant`.
+- Fluxo de autenticação completo: registro (cria Tenant + Admin da Clínica), verificação de e-mail,
+  login, recuperação de senha, MFA obrigatório em todo login (OTP e-mail via Cache + Notification, e
+  TOTP via `pragmarx/google2fa-laravel`), sessão com timeout absoluto + inatividade.
+- Primitiva de envelope encryption (`EncryptionService`, AES-256-GCM, adiantada da Fase 9 — ver ADR-006
+  em `01-Arquitetura.md`), usada para cifrar `mfa_totp_secret`.
+- Papéis e permissões seed (7 papéis) via `RolesAndPermissionsSeeder`, `UserPolicy` base, comando
+  `authorization:make-super-admin`.
+- Módulo `Audit`: `AuditLogger` + listener dos eventos nativos de auth do Laravel (login, logout, falha
+  de autenticação, registro, falha de desafio MFA), tabela `audit_logs` append-only.
+- 26 testes PHPUnit cobrindo esse fluxo; verificado manualmente de ponta a ponta contra MySQL real.
+- **Pendências explícitas desta fase, não bloqueantes:** convite de Secretária/Financeiro, timeout de
+  sessão configurável por tenant (depende do módulo Settings), tela de Super Admin, QR Code visual no
+  setup de TOTP (hoje mostra secret + URI em texto).
 
 ## Fase 2 — Users, Psychologists, Patients, Guardians
 - Cadastro de paciente (obrigatórios: e-mail, confirmação, senha, confirmação, nome de identificação).
 - Campos opcionais pós-primeiro-acesso (CPF, telefones, contatos de recado, endereço, nascimento).
 - Cadastro de responsável legal, obrigatório quando paciente menor de 16 anos.
 - Cadastro profissional do psicólogo.
-- Envelope encryption (Master Key/DEK) implementado e aplicado a todo PII sensível dessas entidades.
+- PII sensível dessas entidades cifrada reaproveitando `Modules\Security\Casts\EnvelopeEncrypted` (já
+  implementado na Fase 1) — só falta o versionamento avançado/rotação, que é da Fase 9.
 
 ## Fase 3 — Scheduling
 - Definição de disponibilidade do psicólogo (dias, horários, duração padrão, intervalos, férias,

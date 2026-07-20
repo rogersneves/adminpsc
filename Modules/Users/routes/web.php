@@ -1,8 +1,3 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use Modules\Users\Http\Controllers\UsersController;
-
-Route::middleware(['auth', 'verified'])->group(function () {
-    Route::resource('users', UsersController::class)->names('users');
-});
+// Rotas do módulo será adicionadas quando houver telas próprias deste módulo.

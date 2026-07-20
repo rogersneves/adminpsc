@@ -4,6 +4,7 @@ namespace Modules\Tenant\Providers;
 
 use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
+use Modules\Tenant\Support\CurrentTenant;
 
 class TenantServiceProvider extends ModuleServiceProvider
 {
@@ -16,6 +17,13 @@ class TenantServiceProvider extends ModuleServiceProvider
      * The lowercase version of the module name.
      */
     protected string $nameLower = 'tenant';
+
+    public function register(): void
+    {
+        parent::register();
+
+        $this->app->singleton(CurrentTenant::class);
+    }
 
     /**
      * Command classes to register.

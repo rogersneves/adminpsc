@@ -79,14 +79,25 @@ cara de manter; isolamento por coluna com Eloquent Global Scope automático dá 
 fração da complexidade operacional, e permite migrar para schema-per-tenant depois, se um cliente grande
 exigir isolamento físico (decisão reavaliável, registrar novo ADR se acontecer).
 
-Mecanismo:
-- Toda tabela de negócio tem `tenant_id` (FK para `tenants.id`, UUID).
-- Um `TenantScope` (Global Scope) é aplicado automaticamente a todo Model que use o trait `BelongsToTenant`
-  (módulo Core), filtrando sempre pelo tenant do usuário autenticado.
-- Middleware `ResolveTenant` identifica o tenant atual (por usuário autenticado; domínio/subdomínio fica
-  para quando o SaaS for exposto publicamente) e o injeta num `TenantContext` singleton do container.
-- Nenhuma query de negócio pode rodar sem tenant resolvido — Models com `BelongsToTenant` lançam exceção
-  se usados fora de um contexto de tenant (falha segura, nunca vaza dado entre tenants por omissão).
+Mecanismo (implementado na Fase 1 — `Modules/Tenant`):
+- Toda tabela de negócio tem `tenant_id` (FK de aplicação para `tenants.id`, UUID; ver nota sobre
+  `users.tenant_id` abaixo — essa coluna específica não leva FK de banco por razão de ordem de migration).
+- Um `TenantScope` (Global Scope) é aplicado automaticamente a todo Model que use o trait
+  `Modules\Tenant\Traits\BelongsToTenant`, filtrando sempre pelo tenant resolvido da requisição atual.
+- Middleware `Modules\Tenant\Http\Middleware\ResolveTenant` (alias `resolve.tenant`) roda depois de `auth`,
+  identifica o tenant do usuário autenticado (por `user->tenant_id`; domínio/subdomínio fica para quando
+  o SaaS for exposto publicamente) e o injeta no singleton `Modules\Tenant\Support\CurrentTenant`.
+- Nenhuma query de negócio pode rodar sem tenant resolvido — Models com `BelongsToTenant` lançam
+  `UnresolvedTenantException` se usados fora de um contexto de tenant resolvido em produção (falha segura,
+  nunca vaza dado entre tenants por omissão); em console/testes sem tenant resolvido, a scope é ignorada
+  para não travar seeders/comandos administrativos.
+
+**Exceção deliberada: `User` não usa `BelongsToTenant`/`TenantScope`.** O login precisa localizar um
+usuário pelo e-mail *antes* de qualquer tenant estar resolvido (`User::where('email', ...)->first()`) —
+aplicar a scope aqui criaria uma dependência circular (não dá pra resolver o tenant sem antes achar o
+usuário, e não dá pra achar o usuário se a query já exige um tenant resolvido). `User` tem uma coluna
+`tenant_id` simples + relação `belongsTo(Tenant::class)`, sem auto-filtro. A scope estrita é para dados de
+negócio (Patients, Sessions etc., a partir da Fase 2), não para a própria tabela de autenticação.
 
 ## Desacoplamento para futura API pública
 
@@ -138,3 +149,17 @@ de ambiguidade.
 **Consequência:** API de setup do cliente é mais simples (sem callbacks manuais de resolve/setup) e o
 bundle é menor. Se houver um motivo específico para exigir v2, isso precisa ser revisto — registrar novo
 ADR se a decisão for revertida.
+
+### ADR-006 — Primitiva de envelope encryption adiantada para a Fase 1
+**Contexto:** o roadmap original previa a arquitetura completa de criptografia (Master Key/DEK/rotação)
+só na Fase 9. Mas a Fase 1 (MFA obrigatório) precisa cifrar o `mfa_totp_secret` do usuário — `docs/04-
+Seguranca.md` já exige isso, e implementar MFA armazenando o secret em texto puro não é uma opção segura,
+nem temporária.
+**Decisão:** implementar já na Fase 1 o primitivo central de envelope encryption (`Modules\Security\
+Services\EncryptionService`, AES-256-GCM, Master Key de `ENCRYPTION_MASTER_KEY` cifrando uma DEK por
+contexto, tabela `encryption_keys`, cast Eloquent reutilizável `Modules\Security\Casts\EnvelopeEncrypted`).
+Escopo limitado a uma DEK ativa por contexto (versão 1) — sem Job de rotação, sem versionamento avançado
+ainda (isso continua na Fase 9).
+**Consequência:** o mesmo cast já fica pronto para cifrar PII de pacientes/responsáveis na Fase 2, sem
+retrabalho — só reaproveitar `EnvelopeEncrypted::class.':contexto'` no `casts()` do Model. Rotação de
+chave, múltiplas DEKs por tenant e o Job de recriptografia em background continuam pendências da Fase 9.

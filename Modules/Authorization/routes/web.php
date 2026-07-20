@@ -1,8 +1,3 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use Modules\Authorization\Http\Controllers\AuthorizationController;
-
-Route::middleware(['auth', 'verified'])->group(function () {
-    Route::resource('authorizations', AuthorizationController::class)->names('authorization');
-});
+// Rotas do módulo será adicionadas quando houver telas próprias deste módulo.
