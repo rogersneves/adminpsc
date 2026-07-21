@@ -60,23 +60,37 @@ calculada a partir de `patients.birth_date_encrypted` for < 16 anos — validado
 gravada/alterada (o campo é opcional e não existe no cadastro inicial), não em
 constraint de banco.
 
-### `psychologist_availabilities`
-`id (uuid, pk)`, `tenant_id`, `psychologist_id`, `weekday` (ou `date` para exceções pontuais),
-`start_time`, `end_time`, `session_duration_minutes`, `buffer_minutes`, `type` (enum: recorrente,
-bloqueio, férias, feriado, particular), `created_at`, `updated_at`, `deleted_at`.
+### `psychologist_availabilities` (implementado na Fase 3)
+`id (uuid, pk)`, `tenant_id`, `psychologist_id`, `weekday` (nullable, 0-6 — usado por `recorrente`),
+`date` (nullable — usado por `particular`/`bloqueio`/`ferias`/`feriado`), `start_time`, `end_time`,
+`session_duration_minutes` (nullable — cai no padrão do psicólogo quando ausente), `buffer_minutes`
+(default 0), `type` (string: recorrente, particular — adicionam disponibilidade; bloqueio, ferias,
+feriado — removem), `created_at`, `updated_at`, `deleted_at`.
 
-### `sessions` (sessões clínicas — não confundir com sessão HTTP)
+### `clinical_sessions` (implementado na Fase 3 — **não é `sessions`**)
+**Nome real da tabela: `clinical_sessions`, não `sessions`.** `sessions` já é a tabela de sessão HTTP do
+próprio Laravel (`SESSION_DRIVER=database`, criada em
+`database/migrations/0001_01_01_000000_create_users_table.php`) — usar o mesmo nome causaria colisão
+real de tabela, não só confusão de nome. O Model Eloquent ainda se chama `Session`
+(`Modules\Scheduling\Models\Session`, com `protected $table = 'clinical_sessions'`), já que o namespace
+completo desambigua para quem lê o código.
 `id (uuid, pk)`, `tenant_id`, `patient_id`, `psychologist_id`, `scheduled_at`, `duration_minutes`,
 `modality` (enum: presencial, online, domiciliar), `status` (enum: agendada, confirmada, realizada,
-cancelada, reagendada, não_compareceu), `charge_id (fk financial_charges, nullable)`,
-`medical_record_entry_id (fk medical_record_entries, nullable)`, `rescheduled_from_id (fk sessions,
-nullable — histórico de reagendamento)`, `created_at`, `updated_at`, `deleted_at`.
-Índice composto `(tenant_id, psychologist_id, scheduled_at)` — usado pelo bloqueio transacional contra
-dupla reserva (`SELECT ... FOR UPDATE` dentro de transação ao criar/mover uma sessão).
+cancelada, reagendada, nao_compareceu), `rescheduled_from_id` (fk `clinical_sessions.id`, nullable —
+histórico de reagendamento), `created_at`, `updated_at`, `deleted_at`.
+Índice composto `(tenant_id, psychologist_id, scheduled_at)` — usado pela checagem de disponibilidade;
+o bloqueio transacional contra dupla reserva trava a linha do `Psychologist` (`lockForUpdate()`), não
+linhas de `clinical_sessions` — `SELECT ... FOR UPDATE` não trava um horário que ainda não tem linha.
+`charge_id` (fk `financial_charges`) e `medical_record_entry_id` (fk `medical_record_entries`) citados
+em versões anteriores deste documento **não foram criados nesta fase** — as tabelas que referenciam só
+existem a partir da Fase 4/5; serão adicionados via migration própria quando chegarem, em vez de deixar
+colunas FK apontando para nada.
 
-### `waiting_list_entries`
-`id (uuid, pk)`, `tenant_id`, `patient_id`, `psychologist_id`, `desired_period (json)`, `status`,
-`created_at`, `updated_at`.
+### `waiting_list_entries` (implementado na Fase 3)
+`id (uuid, pk)`, `tenant_id`, `patient_id`, `psychologist_id`, `desired_period (json)`, `status`
+(default `aberto`), `created_at`, `updated_at`. Sem correspondência automática com horários que abrem —
+depende do módulo Notifications (Fase 7) para notificar; por ora é só um registro de intenção, visível
+ao psicólogo/admin.
 
 ### `medical_record_entries`
 Separado do cadastro do paciente, nunca sobrescrito — cada edição gera uma nova versão.

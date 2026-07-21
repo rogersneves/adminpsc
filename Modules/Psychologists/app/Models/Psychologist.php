@@ -28,6 +28,11 @@ class Psychologist extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function availabilities()
+    {
+        return $this->hasMany(PsychologistAvailability::class);
+    }
+
     protected function casts(): array
     {
         return [

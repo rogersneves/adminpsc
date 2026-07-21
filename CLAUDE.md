@@ -98,10 +98,21 @@ or in React components.**
 Scopes\TenantScope`) on every Model using `Modules\Tenant\Traits\BelongsToTenant` (ADR-003). Middleware
 `resolve.tenant` populates the `Modules\Tenant\Support\CurrentTenant` singleton after `auth`. **`User`
 deliberately does not use `BelongsToTenant`** — login must find a user by email before any tenant is
-resolved; see the note in `docs/01-Arquitetura.md`. `Patient`, `Guardian`, and `Psychologist` (Fase 2) are
-the first real consumers of the strict scope — **every route that touches one of these models MUST
-include `resolve.tenant` in its middleware, or it 500s in real usage** (see the gotcha below — PHPUnit
-will not catch a missing `resolve.tenant`, only manual/browser testing will).
+resolved; see the note in `docs/01-Arquitetura.md`. `Patient`, `Guardian`, `Psychologist` (Fase 2), and
+`Session`/`WaitingListEntry`/`PsychologistAvailability` (Fase 3) are the real consumers of the strict
+scope — **every route that touches one of these models MUST include `resolve.tenant` in its middleware,
+or it 500s in real usage.** `resolve.tenant` is registered in `bootstrap/app.php` with explicit priority
+(`prependToPriorityList`) to run before `SubstituteBindings` — without that, implicit route-model-binding
+(`{psychologist}`, `{session}`, etc.) resolves before the tenant does, no matter where `resolve.tenant`
+sits in the route's own middleware array (Fase 3 gotcha below — this is the big one, read it before
+adding any new route with a `{tenantScopedModel}` parameter). On top of the scope, any Controller that
+receives a `BelongsToTenant` model via route binding also calls
+`Modules\Tenant\Support\CurrentTenant::ownsOrFail($model)` explicitly — defense in depth, and the only
+way this specific check is actually exercised by PHPUnit (see below for why the scope alone isn't
+testable). Cross-tenant isolation for a real business model is covered by
+`tests/Feature/Tenant/PatientTenantIsolationTest.php` and `tests/Feature/Scheduling/
+SchedulingTenantIsolationTest.php`; middleware resolution itself by `tests/Feature/Tenant/
+ResolveTenantTest.php`.
 `tenant_id` is in each model's `$fillable` (same precedent as `User`) — safe here because every Action in
 this codebase builds explicit attribute arrays and never forwards raw request input into `create()`.
 
@@ -142,6 +153,21 @@ array — enforced by `Modules\Guardians\Rules\PatientRequiresGuardianIfMinor`. 
 records (no `user_id`, no login — the `responsavel_legal` role stays seeded but unused). Psychologists are
 created by `admin_clinica`/`super_admin` (`POST /psicologos`, gated by the existing `manage-users`
 permission — no new permission needed), which sends a password-reset link instead of a temporary password.
+
+**Scheduling (Fase 3, done):** availability rules (`Modules\Psychologists\Models\PsychologistAvailability`,
+managed by the psychologist via `GET/POST /psicologos/{psychologist}/disponibilidade`) feed
+`Modules\Scheduling\Services\AvailabilityCalculator`, which computes bookable slots on-the-fly (no slot
+table) for a rolling window (`config('scheduling.booking_horizon_days')`, default 30). Booking
+(`POST /agenda/{psychologist}/reservar`) goes through `Modules\Scheduling\Actions\BookSessionAction`,
+which locks the `Psychologist` row (`lockForUpdate()`) and re-validates the exact slot inside the
+transaction before inserting — that's the double-booking guard, not a lock on the (not-yet-existing)
+session row. Cancel/reschedule enforce a minimum-notice window
+(`config('scheduling.minimum_reschedule_notice_hours')`, default 24h,
+`Modules\Scheduling\Traits\EnsuresMinimumNotice`); reschedule never mutates the original row — it cancels
+it and books a new one linked via `rescheduled_from_id`. **The clinical-session table is called
+`clinical_sessions`, not `sessions`** — `sessions` is already Laravel's own HTTP session table
+(`SESSION_DRIVER=database`). The Eloquent model is still `Modules\Scheduling\Models\Session`
+(`protected $table = 'clinical_sessions'`).
 
 **Frontend:** Inertia pages live in `resources/js/Pages` (root) or `Modules/{Name}/resources/js/Pages`
 (per module). shadcn/ui components are copied into `resources/js/components/ui` (lowercase, per the
@@ -206,23 +232,61 @@ back to v2. Flagged here in case there was a specific reason v2 was required.
   "Call to undefined method" until you add `use Illuminate\Foundation\Auth\Access\AuthorizesRequests;`
   to that base class (already done). Don't re-add it per-controller.
 
+## Gotchas hit during Fase 3
+
+- **The big one: `SubstituteBindings` (implicit route-model-binding) is priority-sorted to run before ANY
+  custom middleware, regardless of where you put that middleware in the route's own array.** Laravel
+  merges route-group middleware with a fixed internal `$middlewarePriority` list before running it, and
+  `SubstituteBindings` sits high in that list; an unlisted middleware like `resolve.tenant` — even written
+  as `Route::middleware(['auth','verified','resolve.tenant'])` — still gets sorted to run *after* it. The
+  practical effect: any route with an implicitly-bound `BelongsToTenant` parameter (`{psychologist}`,
+  `{session}`, `{availability}`) throws `UnresolvedTenantException` for **every** legitimate user, not
+  just cross-tenant ones — it's a full outage for that route, not a silent security gap. **PHPUnit cannot
+  catch this either way**: `runningInConsole()` is always true in tests, so the scope's console-bypass
+  branch fires and the query just quietly succeeds unscoped — tests stay green whether the ordering bug is
+  present or not. This one only surfaces by actually hitting the route
+  (`php artisan serve` + curl/browser) — it did, on `/psicologos/{psychologist}/disponibilidade`, and 500'd.
+  Fixed once, at the root, in `bootstrap/app.php`:
+  ```php
+  $middleware->prependToPriorityList(
+      before: \Illuminate\Routing\Middleware\SubstituteBindings::class,
+      prepend: \Modules\Tenant\Http\Middleware\ResolveTenant::class,
+  );
+  ```
+  This didn't need to be repeated per-route — it fixed every existing and future route with an implicit
+  tenant-scoped binding in one place. If you ever add another middleware that must run before route model
+  binding resolves, it needs the same treatment.
+- **Relatedly:** don't rely on the global scope alone to protect a route that receives a tenant-scoped
+  model via implicit binding — add `CurrentTenant::ownsOrFail($model)` explicitly in the controller (see
+  `AgendaController`, `WaitingListController`). It's cheap, it's the only form of this check PHPUnit can
+  actually exercise, and it doesn't depend on getting the middleware-priority ordering right forever.
+- **Table name collisions with Laravel's own tables are a real risk, not just a naming-clash annoyance.**
+  `sessions` (clinical) vs `sessions` (Laravel's HTTP session table, `SESSION_DRIVER=database`) would have
+  been a hard collision — caught before running the migration, not after. When naming a new table, grep
+  `database/migrations/` for the name first if there's any chance a Laravel subsystem might already use it
+  (`sessions`, `cache`, `jobs`, `failed_jobs`, `notifications`, `migrations` are the obvious ones already
+  in this app).
+
 ## What exists vs. what doesn't yet
 
-**Done (Fase 0 + Fase 1 + Fase 2):** Laravel + Inertia + React + Tailwind + shadcn/ui wiring; the 18
-module skeletons; `Tenant` model/scope/middleware; full registration → email verification → login → MFA
+**Done (Fase 0 through Fase 3):** Laravel + Inertia + React + Tailwind + shadcn/ui wiring; the 18 module
+skeletons; `Tenant` model/scope/middleware; full registration → email verification → login → MFA
 (email OTP + TOTP) → session-timeout-guarded dashboard flow (`Modules\Authentication`); envelope
 encryption primitives (`EnvelopeEncrypted`, `EncryptedJson`, `searchHash`, all in `Modules\Security`);
 RBAC seeded (`Modules\Authorization`); immutable audit log wired to Laravel's native auth events
 (`Modules\Audit`); tenant-scoped patient self-registration + optional-profile-with-guardian-rule
-(`Modules\Patients`, `Modules\Guardians`); admin-created psychologist accounts (`Modules\Psychologists`).
-36 PHPUnit tests, plus two manual end-to-end passes against real MySQL (one per phase — both caught real
-bugs PHPUnit missed, see the gotchas sections above).
+(`Modules\Patients`, `Modules\Guardians`); admin-created psychologist accounts (`Modules\Psychologists`);
+psychologist availability + on-the-fly slot calculation + transactional booking + cancel/reschedule with
+minimum notice + waiting list (`Modules\Scheduling`). 54 PHPUnit tests, plus three manual end-to-end
+passes against real MySQL (one per phase — all three caught real bugs PHPUnit missed, see the gotchas
+sections above — this is a pattern, not a fluke: keep doing the manual pass every phase).
 
-**Not built yet:** Scheduling, MedicalRecords, Financial, Payments, Reports, Notifications, CMS,
-Settings — those are Fase 3 onward in `docs/06-Roadmap.md`, re-evaluate architectural/security/LGPD
-impact before starting each one. Also not built: admin-facing patient list/management UI, psychologist
-profile editing, Secretária/Financeiro staff invites, guardian portal access — all explicitly deferred,
-see the Fase 2 entry in `docs/06-Roadmap.md` for the reasoning.
+**Not built yet:** MedicalRecords, Financial, Payments, Reports, Notifications, CMS, Settings — those are
+Fase 4 onward in `docs/06-Roadmap.md`, re-evaluate architectural/security/LGPD impact before starting
+each one. Also not built: admin-facing patient list/management UI, psychologist profile editing,
+Secretária/Financeiro staff invites, guardian portal access (Fase 2 deferrals); automatic waiting-list
+notification when a slot opens (needs Fase 7/Notifications), editing/removing an existing availability
+rule beyond delete, a visual calendar UI for booking (Fase 3 deferrals — see its roadmap entry).
 
 Also not yet in place: `lang/` translation files and the React `t()`/`useTranslation` hook described in
 `docs/05-UIUX-Design-System.md` (pages currently hardcode Portuguese text as a placeholder — don't copy

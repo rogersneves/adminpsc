@@ -44,14 +44,33 @@ instalado (sem dados), configuração de ambiente (MySQL, fila database).
   do responsável legal (papel `responsavel_legal` seguirá seedado sem uso); rotação/versionamento
   avançado de chave de criptografia (Fase 9).
 
-## Fase 3 — Scheduling
-- Definição de disponibilidade do psicólogo (dias, horários, duração padrão, intervalos, férias,
-  bloqueios, feriados, horários particulares).
-- Reserva de horário pelo paciente restrita à disponibilidade publicada.
-- Bloqueio transacional contra dupla reserva (lock a nível de transação no MySQL).
-- Lista de espera.
-- Cancelamento/reagendamento respeitando antecedência mínima configurável (padrão 24h).
-- Status de sessão (agendada, confirmada, realizada, cancelada, reagendada, não compareceu).
+## Fase 3 — Scheduling (concluída)
+- Disponibilidade do psicólogo (`Modules\Psychologists\Models\PsychologistAvailability`): regras
+  `recorrente` (semanal) e `particular` (dia avulso) adicionam disponibilidade; `bloqueio`/`ferias`/
+  `feriado` removem. Calculadas on-the-fly por `Modules\Scheduling\Services\AvailabilityCalculator`,
+  sem materializar slots em tabela.
+- Reserva pelo paciente restrita à disponibilidade calculada (`GET/POST /agenda/{psychologist}`),
+  bloqueio transacional contra dupla reserva via `lockForUpdate()` na linha do `Psychologist` (não em
+  `clinical_sessions` — um horário ainda não reservado não tem linha pra travar).
+- Lista de espera (`waiting_list_entries`) sem correspondência automática — depende do módulo
+  Notifications (Fase 7).
+- Cancelamento/reagendamento com antecedência mínima configurável (`config('scheduling.
+  minimum_reschedule_notice_hours')`, padrão 24h); reagendar cria uma nova sessão ligada por
+  `rescheduled_from_id`, nunca sobrescreve a original.
+- Status de sessão via `Modules\Scheduling\Enums\SessionStatus`.
+- **A tabela chama-se `clinical_sessions`, não `sessions`** — colisão real com a tabela de sessão HTTP
+  do Laravel, descoberta só ao escrever a migration. Ver `02-Banco-de-Dados.md`.
+- **Corrigido um bug estrutural em toda a aplicação, não só desta fase:** o binding implícito de rota
+  (`{psychologist}`, `{session}`, etc.) roda antes de `resolve.tenant` por padrão — Laravel ordena
+  middleware por uma lista de prioridade interna que dá a `SubstituteBindings` prioridade mais alta que
+  qualquer middleware customizado, não importa a ordem no array da rota. Isso quebrava qualquer rota
+  usando binding implícito de um Model `BelongsToTenant`, incluindo rotas já existentes das Fases 2 e 3.
+  Corrigido uma vez, na raiz (`bootstrap/app.php`, `prependToPriorityList`), não rota por rota. Ver
+  gotcha detalhado no CLAUDE.md — releva por que nenhum teste PHPUnit pegou isso sozinho.
+- **Pendências explícitas desta fase, não bloqueantes:** notificação automática de vaga aberta na lista
+  de espera (Fase 7); edição/exclusão de responsáveis já cadastrados (Fase 2, idem); QR Code visual
+  (herdado da Fase 1); calendário visual (grade semanal/mensal) — a tela de reserva lista os horários
+  por dia, não um calendário.
 
 ## Fase 4 — MedicalRecords
 - Prontuário separado do cadastro, com versionamento completo (nunca sobrescreve).

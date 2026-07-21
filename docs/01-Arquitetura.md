@@ -87,6 +87,14 @@ Mecanismo (implementado na Fase 1 — `Modules/Tenant`):
 - Middleware `Modules\Tenant\Http\Middleware\ResolveTenant` (alias `resolve.tenant`) roda depois de `auth`,
   identifica o tenant do usuário autenticado (por `user->tenant_id`; domínio/subdomínio fica para quando
   o SaaS for exposto publicamente) e o injeta no singleton `Modules\Tenant\Support\CurrentTenant`.
+  **`resolve.tenant` está registrado em `bootstrap/app.php` com prioridade explícita para rodar antes de
+  `SubstituteBindings`** (o middleware que resolve `{model}` em rotas) — sem isso, o binding implícito de
+  rota roda ANTES do tenant ser resolvido, e qualquer rota com um parâmetro `BelongsToTenant` (`{patient}`,
+  `{psychologist}`, `{session}`...) quebra com `UnresolvedTenantException`, não importa a ordem do array
+  de middleware da própria rota (bug real da Fase 3, corrigido na raiz — ver CLAUDE.md). Além disso,
+  qualquer Controller que receba um Model `BelongsToTenant` via binding de rota deve chamar
+  `CurrentTenant::ownsOrFail($model)` explicitamente — a global scope sozinha não é suficiente porque
+  `app()->runningInConsole()` é sempre `true` durante testes PHPUnit, mascarando o isolamento no CI.
 - Nenhuma query de negócio pode rodar sem tenant resolvido — Models com `BelongsToTenant` lançam
   `UnresolvedTenantException` se usados fora de um contexto de tenant resolvido em produção (falha segura,
   nunca vaza dado entre tenants por omissão); em console/testes sem tenant resolvido, a scope é ignorada

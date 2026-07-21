@@ -2,8 +2,13 @@
 
 namespace Modules\Scheduling\Providers;
 
+use Illuminate\Support\Facades\Gate;
 use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
+use Modules\Scheduling\Models\Session;
+use Modules\Scheduling\Models\WaitingListEntry;
+use Modules\Scheduling\Policies\SessionPolicy;
+use Modules\Scheduling\Policies\WaitingListEntryPolicy;
 
 class SchedulingServiceProvider extends ModuleServiceProvider
 {
@@ -34,9 +39,17 @@ class SchedulingServiceProvider extends ModuleServiceProvider
         RouteServiceProvider::class,
     ];
 
+    public function boot(): void
+    {
+        parent::boot();
+
+        Gate::policy(Session::class, SessionPolicy::class);
+        Gate::policy(WaitingListEntry::class, WaitingListEntryPolicy::class);
+    }
+
     /**
      * Define module schedules.
-     * 
+     *
      * @param $schedule
      */
     // protected function configureSchedules(Schedule $schedule): void

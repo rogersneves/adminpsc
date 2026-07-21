@@ -6,6 +6,8 @@ use Illuminate\Support\Facades\Gate;
 use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
 use Modules\Psychologists\Models\Psychologist;
+use Modules\Psychologists\Models\PsychologistAvailability;
+use Modules\Psychologists\Policies\PsychologistAvailabilityPolicy;
 use Modules\Psychologists\Policies\PsychologistPolicy;
 
 class PsychologistsServiceProvider extends ModuleServiceProvider
@@ -42,6 +44,7 @@ class PsychologistsServiceProvider extends ModuleServiceProvider
         parent::boot();
 
         Gate::policy(Psychologist::class, PsychologistPolicy::class);
+        Gate::policy(PsychologistAvailability::class, PsychologistAvailabilityPolicy::class);
     }
 
     /**
