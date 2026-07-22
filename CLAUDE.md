@@ -169,6 +169,27 @@ it and books a new one linked via `rescheduled_from_id`. **The clinical-session 
 (`SESSION_DRIVER=database`). The Eloquent model is still `Modules\Scheduling\Models\Session`
 (`protected $table = 'clinical_sessions'`).
 
+**MedicalRecords (Fase 4, done):** the clinical record (`Modules\MedicalRecords\Models\
+MedicalRecordEntry`) is append-only, deliberately separate from `Patient` — `update()` is overridden to
+throw (same pattern as `AuditLog`), so editing means creating a new row (`version` incremented,
+`previous_version_id` linking to the prior row), never mutating one in place; fields omitted from a new
+version inherit the previous version's value. `delete()` is **not** overridden — soft delete stays
+available for the documented "exclusão administrativa excepcional" case, because
+`SoftDeletes::runSoftDelete()` updates via a raw query builder call (`$this->newModelQuery()->update()`),
+bypassing `Model::update()` entirely — only override the method the framework actually routes through for
+the behavior you want to block. Content (`notes`/`therapeutic_objectives`/`therapeutic_plan`) is one JSON
+blob per version via `EncryptedJson` (same envelope-encryption primitives as Fase 1/2, no changes needed).
+Attachments (`Modules\MedicalRecords\Models\MedicalRecordAttachment`, one per version) encrypt the whole
+file in memory (`Modules\MedicalRecords\Services\AttachmentStorage`, via the existing
+`EncryptionService` — byte-safe on PHP strings, no streaming, 10MB cap) and store it under a random UUID
+path on the private `local` disk; the original filename is encrypted too. "Psicólogo responsável" is
+derived, not a stored assignment: any psychologist with an existing `Session` (Fase 3) for that patient
+has read/write access, modeling shared care within a clinic without a separate case-assignment table.
+Authorization is `Gate::define('medicalRecords.view'|'medicalRecords.create', [MedicalRecordPolicy::class,
+'view'|'create'])` rather than `Gate::policy()`, because the decision is over a `(User, Patient)` pair, not
+over an already-existing `MedicalRecordEntry` instance. Patients do **not** access their own record this
+phase — that's deferred to Fase 10 as a formal LGPD access-request flow, not self-service.
+
 **Frontend:** Inertia pages live in `resources/js/Pages` (root) or `Modules/{Name}/resources/js/Pages`
 (per module). shadcn/ui components are copied into `resources/js/components/ui` (lowercase, per the
 shadcn CLI convention — see `components.json`) and customized directly, not installed as a runtime
@@ -267,9 +288,29 @@ back to v2. Flagged here in case there was a specific reason v2 was required.
   (`sessions`, `cache`, `jobs`, `failed_jobs`, `notifications`, `migrations` are the obvious ones already
   in this app).
 
+## Gotchas hit during Fase 4
+
+- **Laravel's default `throttle:X,Y` middleware keys by `domain + IP` only, not by route.** Every route
+  decorated with `throttle:10,1` (`/register`, `/login`, `/mfa/challenge`, `/reset-password` —
+  `Modules\Authentication\routes\web.php`) shares **one** bucket for a given client IP, not one bucket
+  per route. This is correct, working rate-limiting — it isn't a Fase 4 bug — but it means any
+  multi-account manual/smoke-test script (register admin, log in twice, create two psychologists, reset
+  two passwords, log in as patient, log in again as psychologist...) burns through that shared budget
+  fast and gets a real `429` that looks exactly like a broken auth flow (redirect target and status code
+  don't obviously distinguish "rate limited" from "invalid credentials"). If a manual verification script
+  starts seeing unauthenticated-looking `302`s to `/login` or a `429`, check the `cache` table
+  (`CACHE_STORE=database`) before assuming the application regressed — `TRUNCATE TABLE cache;` between
+  login cycles in test scripts sidesteps it without touching the real limiter config.
+- **A throwaway test script scraping links out of `storage/logs/laravel.log` must track a byte offset,
+  not just re-read the whole file.** The log is never truncated between runs, so "read the whole file and
+  take the last regex match" silently returns a **stale** link/token/OTP code from a previous run once
+  the log has accumulated enough history — indistinguishable from a real bug because both a stale token
+  and a genuine auth failure produce ordinary-looking redirects. Capture `filesize($logFile)` immediately
+  before triggering the mail-sending action, then only search bytes appended after that offset.
+
 ## What exists vs. what doesn't yet
 
-**Done (Fase 0 through Fase 3):** Laravel + Inertia + React + Tailwind + shadcn/ui wiring; the 18 module
+**Done (Fase 0 through Fase 4):** Laravel + Inertia + React + Tailwind + shadcn/ui wiring; the 18 module
 skeletons; `Tenant` model/scope/middleware; full registration → email verification → login → MFA
 (email OTP + TOTP) → session-timeout-guarded dashboard flow (`Modules\Authentication`); envelope
 encryption primitives (`EnvelopeEncrypted`, `EncryptedJson`, `searchHash`, all in `Modules\Security`);
@@ -277,16 +318,20 @@ RBAC seeded (`Modules\Authorization`); immutable audit log wired to Laravel's na
 (`Modules\Audit`); tenant-scoped patient self-registration + optional-profile-with-guardian-rule
 (`Modules\Patients`, `Modules\Guardians`); admin-created psychologist accounts (`Modules\Psychologists`);
 psychologist availability + on-the-fly slot calculation + transactional booking + cancel/reschedule with
-minimum notice + waiting list (`Modules\Scheduling`). 54 PHPUnit tests, plus three manual end-to-end
-passes against real MySQL (one per phase — all three caught real bugs PHPUnit missed, see the gotchas
-sections above — this is a pattern, not a fluke: keep doing the manual pass every phase).
+minimum notice + waiting list (`Modules\Scheduling`); append-only versioned clinical record with encrypted
+content and encrypted file attachments, access derived from treatment history
+(`Modules\MedicalRecords`). 66 PHPUnit tests, plus four manual end-to-end passes against real MySQL (one
+per phase — all four caught real bugs or real gotchas PHPUnit missed, see the gotchas sections above —
+this is a pattern, not a fluke: keep doing the manual pass every phase).
 
-**Not built yet:** MedicalRecords, Financial, Payments, Reports, Notifications, CMS, Settings — those are
-Fase 4 onward in `docs/06-Roadmap.md`, re-evaluate architectural/security/LGPD impact before starting
-each one. Also not built: admin-facing patient list/management UI, psychologist profile editing,
-Secretária/Financeiro staff invites, guardian portal access (Fase 2 deferrals); automatic waiting-list
-notification when a slot opens (needs Fase 7/Notifications), editing/removing an existing availability
-rule beyond delete, a visual calendar UI for booking (Fase 3 deferrals — see its roadmap entry).
+**Not built yet:** Financial, Payments, Reports, Notifications, CMS, Settings — those are Fase 5 onward in
+`docs/06-Roadmap.md`, re-evaluate architectural/security/LGPD impact before starting each one. Also not
+built: admin-facing patient list/management UI, psychologist profile editing, Secretária/Financeiro staff
+invites, guardian portal access (Fase 2 deferrals); automatic waiting-list notification when a slot opens
+(needs Fase 7/Notifications), editing/removing an existing availability rule beyond delete, a visual
+calendar UI for booking (Fase 3 deferrals); patient self-service access to their own medical record
+(Fase 10/LGPD), editing/removing a past medical-record version, multiple attachments per entry, automatic
+`session_id` population when a session is marked completed (Fase 4 deferrals — see its roadmap entry).
 
 Also not yet in place: `lang/` translation files and the React `t()`/`useTranslation` hook described in
 `docs/05-UIUX-Design-System.md` (pages currently hardcode Portuguese text as a placeholder — don't copy

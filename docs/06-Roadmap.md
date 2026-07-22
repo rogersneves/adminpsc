@@ -72,11 +72,38 @@ instalado (sem dados), configuração de ambiente (MySQL, fila database).
   (herdado da Fase 1); calendário visual (grade semanal/mensal) — a tela de reserva lista os horários
   por dia, não um calendário.
 
-## Fase 4 — MedicalRecords
-- Prontuário separado do cadastro, com versionamento completo (nunca sobrescreve).
-- Conteúdo (anotações, objetivos terapêuticos, plano terapêutico, anexos) cifrado com a mesma
-  arquitetura de envelope encryption.
-- Policies restringindo acesso ao psicólogo responsável (e papéis administrativos quando aplicável).
+## Fase 4 — MedicalRecords (concluída)
+- Prontuário (`medical_record_entries`) append-only: `update()`/`delete()` sobrescritos no Model
+  lançando exceção (mesmo padrão do `AuditLog` da Fase 1); cada edição cria uma nova versão
+  (`version` incremental, `previous_version_id` apontando pra anterior) em vez de sobrescrever.
+  Campos não enviados numa nova versão herdam o valor da versão anterior. Exclusão administrativa
+  excepcional continua possível via soft delete (`SoftDeletes::runSoftDelete()` faz update via query
+  builder cru, não passa por `Model::update()` — só o override de `update()` bloqueia edição direta,
+  `delete()` não foi sobrescrito de propósito).
+- Conteúdo (`notes`, `therapeutic_objectives`, `therapeutic_plan`) gravado como um único JSON por
+  versão, cifrado com `Modules\Security\Casts\EncryptedJson` (mesma arquitetura de envelope encryption
+  da Fase 1, reaproveitada sem alterações).
+- Anexos (`medical_record_attachments`): um por versão, conteúdo do arquivo inteiro cifrado em memória
+  via `EncryptionService` e salvo no disco privado do Laravel sob nome aleatório (UUID); nome original
+  do arquivo também cifrado. Limite de 10MB (cifrar em memória não é adequado pra arquivo grande).
+- "Psicólogo responsável" é derivado, não é um campo de atribuição: qualquer psicólogo que já teve ao
+  menos uma `Session` (Fase 3) com o paciente tem acesso de leitura e escrita ao prontuário —
+  modela continuidade de cuidado entre psicólogos da mesma clínica. `admin_clinica`/`manage-users` do
+  mesmo tenant e `super_admin` também têm acesso. Paciente não acessa o próprio prontuário nesta fase
+  (fica para a Fase 10, como processo formal de solicitação LGPD, não autoatendimento).
+- Autorização via `Gate::define` (`MedicalRecordPolicy::view`/`create`) em vez de `Gate::policy` —
+  a decisão é sobre uma relação `(User, Patient)`, não sobre uma instância `MedicalRecordEntry` já
+  existente.
+- Rotas com `resolve.tenant` + `CurrentTenant::ownsOrFail()` explícito em `Patient`/
+  `MedicalRecordAttachment` recebidos por binding implícito, disciplina reforçada desde o gotcha da
+  Fase 3.
+- 66 testes PHPUnit no total (suíte completa Fases 1-4); verificado manualmente de ponta a ponta contra
+  MySQL real via `php artisan serve`, incluindo confirmação direta no banco de que `content_encrypted` e
+  `original_filename_encrypted` não contêm texto puro.
+- **Pendências explícitas desta fase, não bloqueantes:** autoatendimento do paciente ao próprio
+  prontuário (Fase 10); edição/remoção de versão passada; múltiplos anexos por envio; busca em texto
+  cifrado (limitação já documentada em `02-Banco-de-Dados.md`); preenchimento automático de `session_id`
+  ao concluir uma sessão.
 
 ## Fase 5 — Financial, Payments
 - Modelagem Sessão → Cobrança → Pagamento.
