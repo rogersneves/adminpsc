@@ -2,8 +2,11 @@
 
 namespace Modules\Financial\Providers;
 
+use Illuminate\Support\Facades\Gate;
 use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
+use Modules\Financial\Console\Commands\ApplyLateChargeFees;
+use Modules\Financial\Policies\FinancialPolicy;
 
 class FinancialServiceProvider extends ModuleServiceProvider
 {
@@ -22,7 +25,9 @@ class FinancialServiceProvider extends ModuleServiceProvider
      *
      * @var string[]
      */
-    // protected array $commands = [];
+    protected array $commands = [
+        ApplyLateChargeFees::class,
+    ];
 
     /**
      * Provider classes to register.
@@ -34,13 +39,24 @@ class FinancialServiceProvider extends ModuleServiceProvider
         RouteServiceProvider::class,
     ];
 
+    public function boot(): void
+    {
+        parent::boot();
+
+        // Não é Gate::policy — a decisão é sobre "este ator pode ver/gerenciar o
+        // financeiro deste Patient", não sobre uma instância única de FinancialCharge
+        // (mesmo padrão de MedicalRecordPolicy, Fase 4).
+        Gate::define('financial.view', [FinancialPolicy::class, 'view']);
+        Gate::define('financial.manage', [FinancialPolicy::class, 'manage']);
+    }
+
     /**
      * Define module schedules.
-     * 
+     *
      * @param $schedule
      */
-    // protected function configureSchedules(Schedule $schedule): void
-    // {
-    //     $schedule->command('inspire')->hourly();
-    // }
+    protected function configureSchedules(Schedule $schedule): void
+    {
+        $schedule->command(ApplyLateChargeFees::class)->daily();
+    }
 }

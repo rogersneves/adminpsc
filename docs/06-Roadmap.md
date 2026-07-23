@@ -105,12 +105,51 @@ instalado (sem dados), configuração de ambiente (MySQL, fila database).
   cifrado (limitação já documentada em `02-Banco-de-Dados.md`); preenchimento automático de `session_id`
   ao concluir uma sessão.
 
-## Fase 5 — Financial, Payments
-- Modelagem Sessão → Cobrança → Pagamento.
-- Parcelamento, descontos, multas, juros, abatimentos, estornos.
-- Status de cobrança (em aberto, pago, vencido, parcial, cancelado, estornado).
-- Arquitetura preparada para gateways/PIX (interface `PaymentGatewayInterface` no módulo `Payments`,
-  sem integração real ainda).
+## Fase 5 — Financial, Payments (concluída)
+- Cobrança (`financial_charges`, módulo `Financial`) e pagamento (`financial_payments`, módulo
+  `Payments`) como Models separados — `FinancialCharge` não é append-only (precisa de `update()` normal
+  pra transições de status, recálculo de multa/juros e edição de desconto), mas `Payment` nunca é editado
+  nem apagado: reversão de pagamento é `reversed_at`, nunca `delete()`, preservando a trilha de "esta
+  cobrança teve um pagamento que foi estornado" como algo distinto de "nunca foi paga".
+- O status da cobrança nunca é fonte de verdade isolada — é sempre recomputado a partir dos pagamentos
+  não estornados (`Modules\Financial\Services\ChargeStatusCalculator`): total pago ≥ total devido → pago;
+  parcial se cobrir só parte; `estornado` se já teve pagamento e ele foi revertido (distinto de
+  `em_aberto`/`vencido`, que nunca tiveram pagamento algum); `cancelado` é estado terminal, nunca
+  recalculado por cima.
+- Parcelamento (`CreateChargeAction`) gera N linhas independentes em `financial_charges` — não existe
+  tabela de "grupo de parcelamento" no schema documentado; `installment_number`/`installment_total` já
+  descrevem a posição. Valor e desconto são divididos em centavos inteiros, com a última parcela
+  absorvendo o resto da divisão (evita perda/sobra por arredondamento). Vencimentos espaçados por 1 mês.
+- Multa/juros de atraso seguem a convenção brasileira comum (multa fixa de 2%, juros de mora de 1% ao mês
+  pro-rata die), configurável via `config/financial.php`
+  (`FINANCIAL_LATE_FINE_PERCENT`/`FINANCIAL_LATE_INTEREST_PERCENT_PER_MONTH`) — sem base documental
+  própria no projeto, foi uma decisão de escopo explícita. Recalculados (não acumulados) diariamente pelo
+  comando `financial:apply-late-fees`, agendado via `configureSchedules()` do
+  `FinancialServiceProvider` (mecanismo nativo do `nwidart/laravel-modules`, mesmo scheduler que já roda
+  o worker de fila do projeto).
+- Registrar pagamento (`RecordPaymentAction`) e estornar pagamento (`ReversePaymentAction`) travam a
+  linha da `FinancialCharge` com `lockForUpdate()` antes de recalcular o status — mesmo padrão de
+  `BookSessionAction` da Fase 3 (travar a linha pai, não uma linha ainda-não-existente).
+- Autorização (`Gate::define`, mesmo padrão de `MedicalRecordPolicy` da Fase 4): psicólogo que já tratou
+  o paciente tem acesso de **leitura**; só quem tem a nova permissão `manage-financial`
+  (`super_admin`/`admin_clinica`/`financeiro`) pode criar cobrança, registrar/estornar pagamento, editar
+  desconto ou cancelar. **Primeira permissão real do papel `financeiro`**, seedado desde a Fase 1 sem uso
+  até agora.
+- `PaymentGatewayInterface` (módulo `Payments`) existe só como interface (`charge`/`refund`), sem
+  implementação nem binding no container — puramente arquitetural, conforme pedido. O método de pagamento
+  `pix` já existe no enum mas continua sendo registro manual (staff marca "recebi via PIX fora do
+  sistema"), sem chamar gateway nenhum.
+- Lista mínima de pacientes do tenant (`/financeiro/pacientes`, nome + link) construída só pra permitir
+  navegação até o financeiro de um paciente — **não** é a tela completa de gestão de pacientes (busca,
+  edição, desativação) ainda pendente desde a Fase 2.
+- 93 testes PHPUnit no total (suíte completa Fases 1-5); verificado manualmente de ponta a ponta contra
+  MySQL real via `php artisan serve`, incluindo o comando de vencidas rodado contra uma cobrança inserida
+  diretamente no banco com `due_date` no passado.
+- **Pendências explícitas desta fase, não bloqueantes:** relatórios/recibos formais e portal do paciente
+  pro próprio financeiro (Fase 6/Reports); tela completa de gestão de pacientes (Fase 2, ainda pendente);
+  integração real de gateway/PIX (Fase 11 ou quando for priorizado); "abatimento" como conceito distinto
+  de desconto (tratados como o mesmo campo `discount_amount` nesta fase, por não haver campo separado no
+  schema documentado).
 
 ## Fase 6 — Reports, Dashboards
 - Relatórios do psicólogo (filtros por período/paciente/situação financeira/sessões/comparecimento),

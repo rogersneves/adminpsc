@@ -190,6 +190,34 @@ Authorization is `Gate::define('medicalRecords.view'|'medicalRecords.create', [M
 over an already-existing `MedicalRecordEntry` instance. Patients do **not** access their own record this
 phase — that's deferred to Fase 10 as a formal LGPD access-request flow, not self-service.
 
+**Financial/Payments (Fase 5, done):** cobrança (`Modules\Financial\Models\FinancialCharge`) and payment
+(`Modules\Payments\Models\Payment`) are deliberately separate Models in separate modules —
+`FinancialCharge` is **not** append-only (needs normal `update()` for status transitions, late-fee
+recalculation, discount edits), but `Payment` is never edited or deleted: reversal is `reversed_at`,
+never `delete()`, so "this charge had a payment that got reversed" stays distinguishable from "this
+charge was never paid." A charge's `status` is never stored as independent truth — it's always
+recomputed from its non-reversed payments by `Modules\Financial\Services\ChargeStatusCalculator`: paid
+total ≥ total due → `pago`; partially covered → `parcial`; had a payment that's now fully reversed →
+`estornado` (distinct from `em_aberto`/`vencido`, which never had any payment); `cancelado` is terminal
+and never recalculated over. Installments (`CreateChargeAction`) generate N independent
+`financial_charges` rows — there's no "installment plan" table in the documented schema, just
+`installment_number`/`installment_total` for display — amount and discount are split in integer cents
+with the last installment absorbing the rounding remainder, due dates spaced by a month. Late fees follow
+the common Brazilian convention (2% flat fine + 1%/month pro-rata interest, `config/financial.php`,
+`FINANCIAL_LATE_FINE_PERCENT`/`FINANCIAL_LATE_INTEREST_PERCENT_PER_MONTH`) recalculated (not accumulated)
+daily by `php artisan financial:apply-late-fees`, scheduled via `configureSchedules()` in
+`FinancialServiceProvider` (nwidart's own module-scheduling hook — see the Fase 5 gotcha below).
+`RecordPaymentAction`/`ReversePaymentAction` lock the `FinancialCharge` row with `lockForUpdate()` before
+recalculating status, same pattern as `BookSessionAction` (Fase 3). Authorization is
+`Gate::define('financial.view'|'financial.manage', [FinancialPolicy::class, ...])`, same non-`Gate::policy`
+shape as `MedicalRecordPolicy` (Fase 4): a psychologist who has treated the patient gets **read-only**
+access; only `manage-financial` (`super_admin`/`admin_clinica`/`financeiro`) can create a charge,
+record/reverse a payment, edit a discount, or cancel — **`financeiro` is seeded since Fase 1 and this is
+the first permission it's ever actually been given.** `PaymentGatewayInterface` (`Modules\Payments\
+Contracts`) is only ever a contract — no implementation, no container binding — per the roadmap's
+explicit "no real integration yet"; `pix` exists as a `PaymentMethod` case but is still just a manual
+staff-recorded entry, same as cash/card/transfer.
+
 **Frontend:** Inertia pages live in `resources/js/Pages` (root) or `Modules/{Name}/resources/js/Pages`
 (per module). shadcn/ui components are copied into `resources/js/components/ui` (lowercase, per the
 shadcn CLI convention — see `components.json`) and customized directly, not installed as a runtime
@@ -308,9 +336,34 @@ back to v2. Flagged here in case there was a specific reason v2 was required.
   and a genuine auth failure produce ordinary-looking redirects. Capture `filesize($logFile)` immediately
   before triggering the mail-sending action, then only search bytes appended after that offset.
 
+## Gotchas hit during Fase 5
+
+- **`decimal` Eloquent casts return strings, not floats or ints.** `FinancialCharge::$amount` etc. are
+  cast `decimal:2`, so `$charge->amount` is the string `"100.00"`, not a float — arithmetic on it without
+  an explicit `(float)` cast either throws (`TypeError` on strict math funcs) or silently does the wrong
+  thing. Every place that computes with these fields casts explicitly first (see
+  `FinancialCharge::totalDue()`/`totalPaid()`, `ChargeStatusCalculator`, `ApplyLateChargeFees`) — copy
+  that, don't read `$charge->amount` straight into arithmetic.
+- **Splitting a monetary total across N installments in floating point loses or invents cents.**
+  `100 / 3` isn't representable exactly in binary floating point, and naively rounding each share to 2
+  decimals can make the parts not sum back to the original total. `CreateChargeAction::split()` converts
+  to integer cents first (`(int) round($total * 100)`), divides with `intdiv`, and adds the remainder
+  entirely to the last installment — exact by construction, no float rounding drift regardless of how
+  many parts.
+- **A module's `configureSchedules()` hook (from `Nwidart\Modules\Support\ModuleServiceProvider`) is real
+  and auto-invoked** — it's not template boilerplate left commented out for decoration. `FinancialServiceProvider`
+  uncomments it to schedule `financial:apply-late-fees` daily; the base class calls it via `registerCommands()`
+  as long as the method exists (checked with `method_exists`), so overriding it is enough — no extra
+  registration anywhere else needed. Confirmed by reading `vendor/nwidart/laravel-modules/src/Support/
+  ModuleServiceProvider.php` before relying on it, since every other module still has it commented out.
+- **The Fase 4 log-offset and throttle-clearing smoke-test helpers generalize cleanly.** Reused verbatim
+  (`logOffset`/`logSince`/`clearThrottle`/`loginAndMfa`) for the Fase 5 manual smoke test with zero
+  changes needed — confirms those weren't one-off fixes but the right general pattern for any future
+  phase's curl-based manual verification script.
+
 ## What exists vs. what doesn't yet
 
-**Done (Fase 0 through Fase 4):** Laravel + Inertia + React + Tailwind + shadcn/ui wiring; the 18 module
+**Done (Fase 0 through Fase 5):** Laravel + Inertia + React + Tailwind + shadcn/ui wiring; the 18 module
 skeletons; `Tenant` model/scope/middleware; full registration → email verification → login → MFA
 (email OTP + TOTP) → session-timeout-guarded dashboard flow (`Modules\Authentication`); envelope
 encryption primitives (`EnvelopeEncrypted`, `EncryptedJson`, `searchHash`, all in `Modules\Security`);
@@ -320,18 +373,23 @@ RBAC seeded (`Modules\Authorization`); immutable audit log wired to Laravel's na
 psychologist availability + on-the-fly slot calculation + transactional booking + cancel/reschedule with
 minimum notice + waiting list (`Modules\Scheduling`); append-only versioned clinical record with encrypted
 content and encrypted file attachments, access derived from treatment history
-(`Modules\MedicalRecords`). 66 PHPUnit tests, plus four manual end-to-end passes against real MySQL (one
-per phase — all four caught real bugs or real gotchas PHPUnit missed, see the gotchas sections above —
-this is a pattern, not a fluke: keep doing the manual pass every phase).
+(`Modules\MedicalRecords`); charge/payment modeling with installments, discounts, late fees, reversal, and
+a recomputed-not-stored status machine (`Modules\Financial`, `Modules\Payments`). 93 PHPUnit tests, plus
+five manual end-to-end passes against real MySQL (one per phase — all five caught real bugs or real
+gotchas PHPUnit missed, see the gotchas sections above — this is a pattern, not a fluke: keep doing the
+manual pass every phase).
 
-**Not built yet:** Financial, Payments, Reports, Notifications, CMS, Settings — those are Fase 5 onward in
+**Not built yet:** Reports, Notifications, CMS, Settings — those are Fase 6 onward in
 `docs/06-Roadmap.md`, re-evaluate architectural/security/LGPD impact before starting each one. Also not
 built: admin-facing patient list/management UI, psychologist profile editing, Secretária/Financeiro staff
 invites, guardian portal access (Fase 2 deferrals); automatic waiting-list notification when a slot opens
 (needs Fase 7/Notifications), editing/removing an existing availability rule beyond delete, a visual
 calendar UI for booking (Fase 3 deferrals); patient self-service access to their own medical record
 (Fase 10/LGPD), editing/removing a past medical-record version, multiple attachments per entry, automatic
-`session_id` population when a session is marked completed (Fase 4 deferrals — see its roadmap entry).
+`session_id` population when a session is marked completed (Fase 4 deferrals); formal financial reports/
+receipts and patient self-service access to their own financial situation (Fase 6), real
+gateway/PIX integration, "abatimento" as a concept distinct from discount (Fase 5 deferrals — see its
+roadmap entry).
 
 Also not yet in place: `lang/` translation files and the React `t()`/`useTranslation` hook described in
 `docs/05-UIUX-Design-System.md` (pages currently hardcode Portuguese text as a placeholder — don't copy

@@ -41,6 +41,7 @@ class RolesAndPermissionsSeederTest extends TestCase
             'manage-clinic-settings',
             'view-audit-log',
             'platform.manage-tenants',
+            'manage-financial',
         ], $superAdmin->permissions->pluck('name')->all());
     }
 
@@ -54,7 +55,19 @@ class RolesAndPermissionsSeederTest extends TestCase
             'manage-users',
             'manage-clinic-settings',
             'view-audit-log',
+            'manage-financial',
         ], $adminClinica->permissions->pluck('name')->all());
+    }
+
+    public function test_financeiro_receives_manage_financial_permission(): void
+    {
+        $this->seed(RolesAndPermissionsSeeder::class);
+
+        $financeiro = Role::findByName('financeiro', 'web');
+
+        $this->assertEqualsCanonicalizing([
+            'manage-financial',
+        ], $financeiro->permissions->pluck('name')->all());
     }
 
     public function test_seeder_is_idempotent(): void

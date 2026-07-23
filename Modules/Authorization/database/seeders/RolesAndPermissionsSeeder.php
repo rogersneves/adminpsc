@@ -31,6 +31,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'manage-clinic-settings',
         'view-audit-log',
         'platform.manage-tenants',
+        'manage-financial',
     ];
 
     public function run(): void
@@ -54,6 +55,13 @@ class RolesAndPermissionsSeeder extends Seeder
             'manage-users',
             'manage-clinic-settings',
             'view-audit-log',
+            'manage-financial',
+        ]);
+
+        // Primeira permissão real do papel `financeiro` (seedado desde a Fase 1, sem
+        // uso até a Fase 5).
+        Role::findByName('financeiro', 'web')->syncPermissions([
+            'manage-financial',
         ]);
     }
 }
