@@ -13,13 +13,19 @@ use Modules\Users\Models\User;
  * Não é Gate::policy — a decisão é sobre "este ator pode ver/gerenciar o financeiro
  * deste Patient", não sobre uma instância única de FinancialCharge (mesmo padrão de
  * MedicalRecordPolicy, Fase 4). `view` inclui o psicólogo que já tratou o paciente
- * (leitura); `manage` (criar cobrança, registrar/estornar pagamento, cancelar) é
- * restrito a quem tem a permissão `manage-financial`.
+ * (leitura) e, desde a Fase 6, o próprio paciente (leitura da própria situação
+ * financeira — fecha a pendência "portal do paciente pro próprio financeiro" deixada
+ * explicitamente em aberto na Fase 5). `manage` (criar cobrança, registrar/estornar
+ * pagamento, cancelar) continua restrito a quem tem a permissão `manage-financial`.
  */
 class FinancialPolicy
 {
     public function view(User $actor, Patient $patient): bool
     {
+        if ($actor->id === $patient->user_id) {
+            return true;
+        }
+
         if ($this->manage($actor, $patient)) {
             return true;
         }

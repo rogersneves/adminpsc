@@ -151,12 +151,51 @@ instalado (sem dados), configuração de ambiente (MySQL, fila database).
   de desconto (tratados como o mesmo campo `discount_amount` nesta fase, por não haver campo separado no
   schema documentado).
 
-## Fase 6 — Reports, Dashboards
-- Relatórios do psicólogo (filtros por período/paciente/situação financeira/sessões/comparecimento),
-  exportação PDF (`barryvdh/laravel-dompdf`) e Excel (`maatwebsite/excel`).
-- Relatórios do paciente (sessões, situação financeira, recibos).
-- Dashboards do psicólogo (agenda do dia/semana, receitas, pendências, pacientes ativos/inativos,
-  aniversariantes, indicadores gerais) e do paciente (próxima sessão, pendências, histórico, atalhos).
+## Fase 6 — Reports, Dashboards (concluída)
+- Três relatórios separados por assunto para o psicólogo — Sessões, Financeiro, Comparecimento
+  (`Modules\Reports\Actions\Build{Sessions,Financial,Attendance}ReportAction`) — cada um com tela Inertia
+  filtrável (período/paciente/status) e exportação em PDF (`barryvdh/laravel-dompdf`, primeira vez que
+  entra no projeto) e Excel (`maatwebsite/excel`, idem). Nenhuma tabela nova: tudo computado on-the-fly a
+  partir de `clinical_sessions`/`financial_charges`/`financial_payments` já existentes.
+- Exportação é **síncrona no request** (sem fila, sem polling) — a arquitetura lista geração de PDF/Excel
+  como trabalho de Job, mas o módulo Notifications (que avisaria quando o arquivo está pronto) só chega
+  na Fase 7; gerar assíncrono sem poder notificar ninguém seria trabalho pela metade. Decisão de escopo
+  revisável quando Notifications existir.
+- "Book de pacientes" do psicólogo nos relatórios/dashboard é derivado de `Session` existente
+  (`Modules\Reports\Support\PsychologistPatientScope`), mesmo padrão de `MedicalRecordPolicy`/
+  `FinancialPolicy` (Fases 4/5) — `admin_clinica`/`super_admin` veem todo o tenant (ou um psicólogo
+  específico via filtro); `psicologo` só o próprio book, sem opção de trocar.
+- "Comparecimento" = `Realizada / (Realizada + NaoCompareceu)` por paciente — `Cancelada`/`Reagendada`
+  ficam fora do denominador (mudança de agenda, não falha de comparecimento). Nenhuma das duas definições
+  está em `docs/`, foram decisões de escopo explícitas desta fase.
+- Relatórios do paciente **reaproveitam Fases 3 e 5 em vez de reconstruir**: "sessões" já era
+  `GET /minhas-sessoes` (Fase 3); "situação financeira" já era `GET /pacientes/{patient}/financeiro`
+  (Fase 5) — só precisou estender `FinancialPolicy::view` pra permitir o próprio paciente
+  (`$actor->id === $patient->user_id`), fechando a pendência "portal do paciente pro próprio financeiro"
+  deixada em aberto na Fase 5; a mesma tela React (`Ledger.jsx`) já escondia os controles de gestão
+  quando `canManage` é `false`, então não precisou de nenhuma tela nova.
+- "Recibos" é um PDF por `Payment` (`Modules\Payments\Http\Controllers\PaymentReceiptController`),
+  listando a cobrança quitada e a sessão vinculada a ela quando existe (o schema só suporta uma sessão
+  por cobrança — não foi criada nenhuma tabela N:N pagamento↔sessão pra isso). Autorizado pela mesma regra
+  de `financial.view` (staff, psicólogo que tratou o paciente, ou o próprio paciente).
+- Dashboards (`Modules\Reports\Http\Controllers\DashboardController`, substituindo a antiga closure-route
+  de `/dashboard`) só têm dados reais pra `psicologo` (agenda do dia, sessões da semana, receita do mês,
+  pendências, pacientes ativos/inativos, aniversariantes) e `paciente` (próxima sessão, pendências,
+  histórico, atalhos) — únicos papéis citados no bullet do roadmap; qualquer outro papel mantém o card
+  genérico de boas-vindas.
+- "Pacientes ativos/inativos" e "aniversariantes" exigem decifrar `Patient::birth_date_encrypted` em PHP
+  — não há coluna `_hash` pra mês/dia (só `document_number` tem hash de busca), então não dá pra filtrar
+  isso no SQL. Aceitável no volume de uma clínica única; documentado como limitação conhecida.
+- 114 testes PHPUnit no total (suíte completa Fases 1-6); verificado manualmente de ponta a ponta contra
+  MySQL real via `php artisan serve`, incluindo download de PDF/Excel reais (`content-type` correto) dos
+  três relatórios, recibo de pagamento (psicólogo tratante, o próprio paciente, e 403 pra psicólogo sem
+  relação), e dashboards de psicólogo/paciente com dados corretos.
+- **Pendências explícitas desta fase, não bloqueantes:** exportação assíncrona com fila + notificação
+  (revisitar quando o módulo Notifications existir, Fase 7); dashboard dedicado pra
+  admin_clinica/financeiro/secretaria; seletor de psicólogo na UI dos relatórios pro admin (a API já
+  aceita `psychologist_id` via query string, só não tem um `<select>` na tela ainda — não há endpoint de
+  "listar psicólogos do tenant" pra alimentar esse seletor); gráficos/visualizações ricas (só cards e
+  tabelas simples nesta fase).
 
 ## Fase 7 — Notifications
 - Notificações automáticas: confirmação de cadastro/e-mail, lembrete de sessão, cancelamento,

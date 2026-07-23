@@ -2,8 +2,10 @@
 
 namespace Modules\Reports\Providers;
 
+use Illuminate\Support\Facades\Gate;
 use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
+use Modules\Reports\Policies\ReportPolicy;
 
 class ReportsServiceProvider extends ModuleServiceProvider
 {
@@ -33,6 +35,15 @@ class ReportsServiceProvider extends ModuleServiceProvider
         EventServiceProvider::class,
         RouteServiceProvider::class,
     ];
+
+    public function boot(): void
+    {
+        parent::boot();
+
+        // Sem `$patient` — a decisão é "este ator pode abrir a seção de relatórios",
+        // não sobre um registro específico (ver Modules\Reports\Policies\ReportPolicy).
+        Gate::define('reports.view', [ReportPolicy::class, 'view']);
+    }
 
     /**
      * Define module schedules.

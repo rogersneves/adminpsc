@@ -234,11 +234,19 @@ function ChargeCard({ charge, canManage }) {
                                 <span className={payment.reversed_at ? 'text-muted-foreground line-through' : ''}>
                                     {formatCurrency(payment.amount)} · {METHOD_LABELS[payment.method]} · {formatDateTime(payment.paid_at)}
                                 </span>
-                                {canManage && !payment.reversed_at && (
-                                    <Button type="button" variant="ghost" size="sm" onClick={() => reversePayment(payment.id)}>
-                                        Estornar
-                                    </Button>
-                                )}
+                                <div className="flex items-center gap-1">
+                                    <a
+                                        href={`/financeiro/pagamentos/${payment.id}/recibo`}
+                                        className="text-xs text-primary underline"
+                                    >
+                                        Baixar recibo
+                                    </a>
+                                    {canManage && !payment.reversed_at && (
+                                        <Button type="button" variant="ghost" size="sm" onClick={() => reversePayment(payment.id)}>
+                                            Estornar
+                                        </Button>
+                                    )}
+                                </div>
                             </div>
                         ))}
                     </div>

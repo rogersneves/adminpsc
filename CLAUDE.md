@@ -218,6 +218,33 @@ Contracts`) is only ever a contract — no implementation, no container binding 
 explicit "no real integration yet"; `pix` exists as a `PaymentMethod` case but is still just a manual
 staff-recorded entry, same as cash/card/transfer.
 
+**Reports/Dashboards (Fase 6, done):** three separate psychologist-facing reports — Sessions, Financial,
+Attendance (`Modules\Reports\Actions\Build{Sessions,Financial,Attendance}ReportAction`) — each with an
+Inertia filter+table page and a PDF (`barryvdh/laravel-dompdf`) and Excel (`maatwebsite/excel`) export
+sharing the same Action, generated **synchronously in the request** (no queue, no polling) — the
+architecture lists PDF/Excel generation as Job work, but the Notifications module that would announce
+"your file is ready" doesn't exist until Fase 7, so async generation with nothing to notify would be
+half-built; revisit when Notifications ships. No new tables anywhere in this phase — everything is
+computed on-the-fly from `clinical_sessions`/`financial_charges`/`financial_payments`.
+`Modules\Reports\Support\PsychologistPatientScope` derives the psychologist's "book" from `Session`
+(same pattern as `MedicalRecordPolicy`/`FinancialPolicy`, Fases 4/5): `admin_clinica`/`super_admin` see
+the whole tenant (or one psychologist via an optional filter); `psicologo` only ever sees their own book.
+Patient-facing "sessões" and "situação financeira" reuse Fase 3's `/minhas-sessoes` and Fase 5's
+`/pacientes/{patient}/financeiro` outright rather than rebuilding — the only change needed was extending
+`FinancialPolicy::view` to allow `$actor->id === $patient->user_id`, which closes the Fase 5 deferral
+("portal do paciente pro próprio financeiro") for free since `Ledger.jsx` already hides every management
+control when `canManage` is `false`. "Recibos" is a PDF per `Payment`
+(`Modules\Payments\Http\Controllers\PaymentReceiptController`), authorized by the same `financial.view`
+ability, listing the one `Session` linked to the underlying charge when present (the schema only supports
+charge→session as 0-or-1, not a N:N table). Dashboards
+(`Modules\Reports\Http\Controllers\DashboardController`, now owning `GET /dashboard` instead of the old
+top-level closure) only compute real data for `psicologo` and `paciente` — the only roles the roadmap
+bullet names; every other role keeps the generic welcome card. "Pacientes ativos/inativos" and
+"aniversariantes" require decrypting `Patient::birth_date_encrypted` in a PHP loop — there's no `_hash`
+column for month/day the way `document_number` has one for exact search, so this can't be pushed into
+SQL; acceptable at single-clinic scale, not something to "fix" by adding a search hash unless volume
+actually becomes a problem.
+
 **Frontend:** Inertia pages live in `resources/js/Pages` (root) or `Modules/{Name}/resources/js/Pages`
 (per module). shadcn/ui components are copied into `resources/js/components/ui` (lowercase, per the
 shadcn CLI convention — see `components.json`) and customized directly, not installed as a runtime
@@ -361,9 +388,26 @@ back to v2. Flagged here in case there was a specific reason v2 was required.
   changes needed — confirms those weren't one-off fixes but the right general pattern for any future
   phase's curl-based manual verification script.
 
+## Gotchas hit during Fase 6
+
+- **`php artisan pail` doesn't work on this WAMP/Windows setup — it needs the `pcntl` extension, which
+  doesn't exist on Windows PHP builds.** Running `composer dev` (which wraps `server`/`queue`/`logs`/`vite`
+  in one `concurrently --kill-others` call) starts all four, `pail` immediately throws `RuntimeException:
+  The [pcntl] extension is required to run Pail.`, and `--kill-others` tears down the other three
+  processes too — so the whole dev stack dies within a couple seconds, not just log tailing. For manual
+  verification on this machine, start `php artisan serve` and `npm run dev` directly in the background
+  instead of going through `composer dev`; skip `php artisan pail` entirely (or run it separately and
+  ignore its failure) rather than debugging why the server/queue/vite processes keep vanishing.
+- **First phase where the manual `php artisan serve` smoke test didn't turn up a new bug.** Worth noting
+  precisely because every phase through Fase 5 did — Fase 6 built entirely on already-battle-tested
+  primitives (`resolve.tenant`, `CurrentTenant::ownsOrFail`, `Gate::define` policies, the log-offset/
+  throttle-clearing smoke-test helpers) rather than introducing new cross-cutting mechanisms, which is
+  probably why. Still do the manual pass every phase regardless — it's cheap insurance, and the absence of
+  a finding this time doesn't mean the next new mechanism won't need it.
+
 ## What exists vs. what doesn't yet
 
-**Done (Fase 0 through Fase 5):** Laravel + Inertia + React + Tailwind + shadcn/ui wiring; the 18 module
+**Done (Fase 0 through Fase 6):** Laravel + Inertia + React + Tailwind + shadcn/ui wiring; the 18 module
 skeletons; `Tenant` model/scope/middleware; full registration → email verification → login → MFA
 (email OTP + TOTP) → session-timeout-guarded dashboard flow (`Modules\Authentication`); envelope
 encryption primitives (`EnvelopeEncrypted`, `EncryptedJson`, `searchHash`, all in `Modules\Security`);
@@ -374,25 +418,28 @@ psychologist availability + on-the-fly slot calculation + transactional booking 
 minimum notice + waiting list (`Modules\Scheduling`); append-only versioned clinical record with encrypted
 content and encrypted file attachments, access derived from treatment history
 (`Modules\MedicalRecords`); charge/payment modeling with installments, discounts, late fees, reversal, and
-a recomputed-not-stored status machine (`Modules\Financial`, `Modules\Payments`). 93 PHPUnit tests, plus
-five manual end-to-end passes against real MySQL (one per phase — all five caught real bugs or real
-gotchas PHPUnit missed, see the gotchas sections above — this is a pattern, not a fluke: keep doing the
-manual pass every phase).
+a recomputed-not-stored status machine (`Modules\Financial`, `Modules\Payments`); three psychologist
+reports with PDF/Excel export, patient self-service access to sessions/financial situation/receipts, and
+role-aware dashboards (`Modules\Reports`). 114 PHPUnit tests, plus six manual end-to-end passes against
+real MySQL (one per phase — the first five caught real bugs or real gotchas PHPUnit missed, see the
+gotchas sections above — keep doing the manual pass every phase regardless of whether Fase 6 found
+nothing new).
 
-**Not built yet:** Reports, Notifications, CMS, Settings — those are Fase 6 onward in
-`docs/06-Roadmap.md`, re-evaluate architectural/security/LGPD impact before starting each one. Also not
-built: admin-facing patient list/management UI, psychologist profile editing, Secretária/Financeiro staff
-invites, guardian portal access (Fase 2 deferrals); automatic waiting-list notification when a slot opens
-(needs Fase 7/Notifications), editing/removing an existing availability rule beyond delete, a visual
-calendar UI for booking (Fase 3 deferrals); patient self-service access to their own medical record
-(Fase 10/LGPD), editing/removing a past medical-record version, multiple attachments per entry, automatic
-`session_id` population when a session is marked completed (Fase 4 deferrals); formal financial reports/
-receipts and patient self-service access to their own financial situation (Fase 6), real
-gateway/PIX integration, "abatimento" as a concept distinct from discount (Fase 5 deferrals — see its
-roadmap entry).
+**Not built yet:** Notifications, CMS, Settings — those are Fase 7 onward in `docs/06-Roadmap.md`,
+re-evaluate architectural/security/LGPD impact before starting each one. Also not built: admin-facing
+patient list/management UI, psychologist profile editing, Secretária/Financeiro staff invites, guardian
+portal access (Fase 2 deferrals); automatic waiting-list notification when a slot opens (needs Fase 7/
+Notifications), editing/removing an existing availability rule beyond delete, a visual calendar UI for
+booking (Fase 3 deferrals); patient self-service access to their own medical record (Fase 10/LGPD),
+editing/removing a past medical-record version, multiple attachments per entry, automatic `session_id`
+population when a session is marked completed (Fase 4 deferrals); real gateway/PIX integration,
+"abatimento" as a concept distinct from discount (Fase 5 deferrals); asynchronous PDF/Excel export with a
+ready notification (needs Fase 7/Notifications), a dashboard for admin_clinica/financeiro/secretaria, a
+psychologist picker in the report filter UI (the backend already accepts `psychologist_id` via query
+string — there's just no `<select>` yet, since there's no "list psychologists" endpoint to feed it), and
+chart/graph visualizations (Fase 6 deferrals — see its roadmap entry).
 
 Also not yet in place: `lang/` translation files and the React `t()`/`useTranslation` hook described in
 `docs/05-UIUX-Design-System.md` (pages currently hardcode Portuguese text as a placeholder — don't copy
-that pattern once i18n wiring exists). Excel/PDF export packages (`maatwebsite/excel`,
-`barryvdh/laravel-dompdf`) are intentionally **not installed yet** — Fase 6 (Reports). QR-code image
-rendering for TOTP setup is also deferred (`EnableTotp.jsx` shows the secret/URI as text today).
+that pattern once i18n wiring exists). QR-code image rendering for TOTP setup is also deferred
+(`EnableTotp.jsx` shows the secret/URI as text today).

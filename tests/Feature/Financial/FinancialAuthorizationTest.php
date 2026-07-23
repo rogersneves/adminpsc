@@ -113,7 +113,7 @@ class FinancialAuthorizationTest extends TestCase
         $this->actingAs($psychologistUser)->get("/pacientes/{$patient->id}/financeiro")->assertForbidden();
     }
 
-    public function test_secretaria_and_patient_cannot_view(): void
+    public function test_secretaria_cannot_view(): void
     {
         $tenant = Tenant::factory()->create();
         $patient = $this->makePatient($tenant);
@@ -121,9 +121,21 @@ class FinancialAuthorizationTest extends TestCase
         $secretaria = User::factory()->create(['tenant_id' => $tenant->id]);
         $secretaria->assignRole('secretaria');
         $this->actingAs($secretaria)->get("/pacientes/{$patient->id}/financeiro")->assertForbidden();
+    }
+
+    public function test_patient_can_view_own_financial_situation_but_not_someone_elses(): void
+    {
+        $tenant = Tenant::factory()->create();
+        $patient = $this->makePatient($tenant);
+        $otherPatient = $this->makePatient($tenant);
 
         $patientUser = User::query()->find($patient->user_id);
-        $this->actingAs($patientUser)->get("/pacientes/{$patient->id}/financeiro")->assertForbidden();
+
+        $response = $this->actingAs($patientUser)->get("/pacientes/{$patient->id}/financeiro");
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page->where('canManage', false));
+
+        $this->actingAs($patientUser)->get("/pacientes/{$otherPatient->id}/financeiro")->assertForbidden();
     }
 
     public function test_patient_from_another_tenant_is_not_found(): void
