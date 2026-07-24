@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Modules\Financial\Enums\ChargeStatus;
+use Modules\Financial\Events\ChargeWasCreated;
 use Modules\Financial\Models\FinancialCharge;
 use Modules\Patients\Models\Patient;
 use Modules\Scheduling\Models\Session;
@@ -49,6 +50,8 @@ class CreateChargeAction
                     'installment_total' => $installmentTotal,
                 ]));
             }
+
+            $charges->each(fn (FinancialCharge $charge) => ChargeWasCreated::dispatch($charge));
 
             return $charges;
         });

@@ -1,56 +1,62 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Modules\Notifications\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Notifications\DatabaseNotification;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class NotificationsController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
+    public function index(Request $request): Response
     {
-        return view('notifications::index');
+        $notifications = $request->user()
+            ->notifications()
+            ->latest()
+            ->paginate(15)
+            ->through(fn (DatabaseNotification $notification) => [
+                'id' => $notification->id,
+                'read_at' => $notification->read_at,
+                'created_at' => $notification->created_at,
+                ...$notification->data,
+            ]);
+
+        return Inertia::render('Notifications/Index', ['notifications' => $notifications]);
+    }
+
+    public function markRead(Request $request, DatabaseNotification $notification): RedirectResponse
+    {
+        $this->authorizeOwnership($request, $notification);
+
+        $notification->markAsRead();
+
+        return back();
+    }
+
+    public function markAllRead(Request $request): RedirectResponse
+    {
+        $request->user()->unreadNotifications->markAsRead();
+
+        return back();
     }
 
     /**
-     * Show the form for creating a new resource.
+     * `DatabaseNotification` não tem Policy própria no projeto (não é um Model de
+     * negócio com tenant) — a única regra de autorização que importa é "esta
+     * notification pertence ao usuário autenticado", checada explicitamente aqui,
+     * mesmo padrão de defesa em profundidade de `CurrentTenant::ownsOrFail()`.
      */
-    public function create()
+    private function authorizeOwnership(Request $request, DatabaseNotification $notification): void
     {
-        return view('notifications::create');
+        abort_unless(
+            $notification->notifiable_type === $request->user()::class
+                && $notification->notifiable_id === $request->user()->id,
+            403,
+        );
     }
-
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request) {}
-
-    /**
-     * Show the specified resource.
-     */
-    public function show($id)
-    {
-        return view('notifications::show');
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit($id)
-    {
-        return view('notifications::edit');
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, $id) {}
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy($id) {}
 }

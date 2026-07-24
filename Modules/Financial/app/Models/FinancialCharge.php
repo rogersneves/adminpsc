@@ -29,6 +29,8 @@ class FinancialCharge extends Model
         'status',
         'installment_number',
         'installment_total',
+        'due_soon_reminder_sent_at',
+        'overdue_reminder_sent_at',
     ];
 
     public function patient()
@@ -71,6 +73,8 @@ class FinancialCharge extends Model
             'status' => ChargeStatus::class,
             'installment_number' => 'integer',
             'installment_total' => 'integer',
+            'due_soon_reminder_sent_at' => 'datetime',
+            'overdue_reminder_sent_at' => 'datetime',
         ];
     }
 }

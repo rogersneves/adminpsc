@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Modules\Financial\Models\FinancialCharge;
 use Modules\Financial\Services\ChargeStatusCalculator;
 use Modules\Payments\Enums\PaymentMethod;
+use Modules\Payments\Events\PaymentWasRecorded;
 use Modules\Payments\Models\Payment;
 
 /**
@@ -43,6 +44,8 @@ class RecordPaymentAction
             ]);
 
             $lockedCharge->update(['status' => $this->calculator->recalculate($lockedCharge)]);
+
+            PaymentWasRecorded::dispatch($payment);
 
             return $payment;
         });

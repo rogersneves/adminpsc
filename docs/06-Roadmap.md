@@ -197,10 +197,57 @@ instalado (sem dados), configuração de ambiente (MySQL, fila database).
   "listar psicólogos do tenant" pra alimentar esse seletor); gráficos/visualizações ricas (só cards e
   tabelas simples nesta fase).
 
-## Fase 7 — Notifications
-- Notificações automáticas: confirmação de cadastro/e-mail, lembrete de sessão, cancelamento,
-  reagendamento, confirmação de pagamento, cobrança, recibos, alterações importantes.
-- Arquitetura de canal plugável, preparada para SMS/WhatsApp futuros sem refatorar o módulo.
+## Fase 7 — Notifications (concluída)
+- Primeira vez que módulos de negócio (Scheduling, Financial, Payments) disparam Events de domínio
+  (`SessionWasCancelled`, `SessionWasRescheduled`, `ChargeWasCreated`, `PaymentWasRecorded`,
+  `PaymentWasReversed`) — até a Fase 6 as Actions só mutavam estado diretamente, sem o padrão "Eventos
+  para efeitos colaterais" de `docs/03-Padroes-de-Codigo.md` chegar a ser exercitado. Cada Action
+  relevante (`CancelSessionAction`, `RescheduleSessionAction`, `CreateChargeAction`,
+  `RecordPaymentAction`, `ReversePaymentAction`) passou a disparar o Event correspondente ao final da
+  própria transação; Listeners do módulo `Notifications` (`Modules\Notifications\Listeners`) consomem
+  esses eventos e enviam a Notification certa — Scheduling/Financial/Payments continuam sem saber que
+  Notifications existe (baixo acoplamento, igual o documentado).
+- Arquitetura de canal pluggable: toda Notification estende `Modules\Notifications\Notifications\
+  TenantNotification` (`ShouldQueue` + `SerializesModels`), cujo `via()` lê
+  `config('notifications.channels.default')` (`mail,database` por padrão, configurável por
+  `NOTIFICATIONS_DEFAULT_CHANNELS`) em vez de cada subclasse decidir o canal. Adicionar SMS/WhatsApp no
+  futuro é acrescentar o nome do canal nessa config e implementar `toSms()`/`toWhatsApp()` nas 8 classes
+  já existentes — nenhuma delas precisa ser refatorada nem o Listener que as dispara.
+- 8 Notifications: `SessionReminderNotification`, `SessionCancelledNotification`,
+  `SessionRescheduledNotification`, `ChargeCreatedNotification` (cobrança), `ChargeDueSoonNotification`,
+  `ChargeOverdueNotification`, `PaymentConfirmedNotification` (inclui link do recibo da Fase 6, sem
+  duplicar uma notification separada só pra isso), `PaymentReversedNotification`. Cancelamento/
+  reagendamento notificam as duas partes (paciente e psicólogo — `SessionPolicy` já permitia os dois
+  cancelarem/reagendarem desde a Fase 3), não só quem tomou a ação. "Confirmação de cadastro/e-mail" do
+  bullet original do roadmap **não** ganhou uma nova Notification — já é resolvida pelo fluxo nativo
+  `MustVerifyEmail`/`sendEmailVerificationNotification()` da Fase 1, refatorar isso pra dentro da nova
+  arquitetura não agregaria nada.
+- Lembrete de sessão (`notifications:send-session-reminders`, horário) e lembrete de cobrança
+  (`notifications:send-charge-reminders`, diário, a vencer + vencida) são polling, não eventos — uma
+  sessão/cobrança não "acontece" no momento do lembrete, o comando pergunta "o que está na janela agora".
+  Idempotência via colunas dedicadas (`clinical_sessions.reminder_sent_at`,
+  `financial_charges.due_soon_reminder_sent_at`/`overdue_reminder_sent_at`) — sem elas, rodar o comando
+  mais de uma vez na mesma janela duplicaria o envio; "vencida" é um alerta único, não repetido a cada
+  execução diária do comando (diferente de `financial:apply-late-fees`, que recalcula sempre).
+- Canal `database`: tabela `notifications` (schema padrão do Laravel, com `uuidMorphs('notifiable')` em
+  vez do `morphs()` de bigint padrão — mesma classe de ajuste já feita pra `model_has_roles` na Fase 1,
+  necessário porque `User` tem PK UUID). Sem `tenant_id` — o isolamento vem inteiramente da relação
+  `$user->notifications()`, mesmo raciocínio que já justifica `User` não usar `BelongsToTenant`.
+- Tela `/notificacoes` (lista paginada, marcar uma/todas como lidas) e contador de não lidas
+  (`unreadNotificationsCount`, prop compartilhada globalmente por `HandleInertiaRequests`) com um sino
+  (`NotificationBell`) adicionado ao `Dashboard.jsx` — não foi criado um layout autenticado
+  compartilhado pra isso (não existe um ainda no projeto; cada página monta o próprio wrapper), então o
+  sino por ora só aparece no Dashboard, não em todas as páginas autenticadas.
+- 132 testes PHPUnit no total (suíte completa Fases 1-7); verificado manualmente de ponta a ponta contra
+  MySQL real: fila `database` real (não só `Notification::fake()`), drenada com
+  `php artisan queue:work`, canais mail (log) e database confirmados com conteúdo correto; os dois
+  comandos de lembrete rodados duas vezes seguidas pra confirmar a idempotência; fluxo HTTP completo
+  (login + MFA + `/notificacoes` + marcar uma lida + marcar todas lidas) via `curl.exe` real.
+- **Pendências explícitas desta fase, não bloqueantes:** canais SMS/WhatsApp (arquitetura pronta, sem
+  implementação real — não há gateway contratado); preferências de notificação por usuário/tenant
+  (o que pode ser desligado, silenciado etc. — depende do módulo Settings); sino de notificação nas
+  demais páginas autenticadas (só no Dashboard por ora, sem layout compartilhado ainda);
+  lembrete de sessão para o psicólogo (só o paciente recebe `SessionReminderNotification` hoje).
 
 ## Fase 8 — CMS
 - Páginas públicas editáveis via GrapesJS (`grapesjs-preset-newsletter` como base), interface

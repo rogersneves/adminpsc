@@ -1,6 +1,7 @@
 import { Link, router, usePage } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { NotificationBell } from '@/Components/NotificationBell';
 
 function formatCurrency(value) {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -141,9 +142,12 @@ export default function Dashboard({ tenant, role, psychologistDashboard, patient
         <div className="min-h-screen bg-neutral-50 p-6">
             <div className="mx-auto flex max-w-2xl flex-col gap-4">
                 <Card>
-                    <CardHeader>
-                        <CardTitle>Bem-vindo, {user?.name}</CardTitle>
-                        <CardDescription>{tenant ? tenant.name : 'Sem tenant resolvido (Super Admin)'}</CardDescription>
+                    <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+                        <div>
+                            <CardTitle>Bem-vindo, {user?.name}</CardTitle>
+                            <CardDescription>{tenant ? tenant.name : 'Sem tenant resolvido (Super Admin)'}</CardDescription>
+                        </div>
+                        <NotificationBell />
                     </CardHeader>
                     <CardContent>
                         <Button variant="outline" onClick={logout}>Sair</Button>

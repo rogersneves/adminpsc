@@ -49,6 +49,11 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'status' => fn () => $request->session()->get('status'),
             ],
+            // Chave própria (não aninhada em "notifications") de propósito: a página
+            // Notifications/Index usa a prop "notifications" para a lista paginada —
+            // se essa shared prop usasse a mesma chave, a prop da página venceria o
+            // merge do Inertia e "unreadCount" sumiria silenciosamente nessa página.
+            'unreadNotificationsCount' => fn () => $request->user()?->unreadNotifications()->count() ?? 0,
         ];
     }
 }

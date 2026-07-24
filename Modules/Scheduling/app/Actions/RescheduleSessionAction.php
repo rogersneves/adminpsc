@@ -7,6 +7,7 @@ namespace Modules\Scheduling\Actions;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Modules\Scheduling\Enums\SessionStatus;
+use Modules\Scheduling\Events\SessionWasRescheduled;
 use Modules\Scheduling\Models\Session;
 use Modules\Scheduling\Traits\EnsuresMinimumNotice;
 
@@ -36,6 +37,8 @@ class RescheduleSessionAction
 
             $newSession->update(['rescheduled_from_id' => $session->id]);
             $session->update(['status' => SessionStatus::Reagendada]);
+
+            SessionWasRescheduled::dispatch($session, $newSession);
 
             return $newSession;
         });

@@ -245,6 +245,41 @@ column for month/day the way `document_number` has one for exact search, so this
 SQL; acceptable at single-clinic scale, not something to "fix" by adding a search hash unless volume
 actually becomes a problem.
 
+**Notifications (Fase 7, done):** first phase where a business module actually dispatches a domain
+Event per `docs/03-Padroes-de-Codigo.md`'s "Eventos para efeitos colaterais" rule — through Fase 6,
+Actions only mutated state directly. `CancelSessionAction`/`RescheduleSessionAction` (`Modules\
+Scheduling`), `CreateChargeAction` (`Modules\Financial`), and `RecordPaymentAction`/`ReversePaymentAction`
+(`Modules\Payments`) now dispatch `SessionWasCancelled`/`SessionWasRescheduled`/`ChargeWasCreated`/
+`PaymentWasRecorded`/`PaymentWasReversed`; Listeners in `Modules\Notifications\Listeners` consume them
+and send the matching Notification — Scheduling/Financial/Payments never import anything from
+`Modules\Notifications`, same low-coupling direction as the doc describes. Every Notification extends
+`Modules\Notifications\Notifications\TenantNotification` (`ShouldQueue` + `SerializesModels`), whose
+`via()` reads `config('notifications.channels.default')` (`mail,database` by default, env-configurable)
+instead of each subclass hardcoding a channel — adding SMS/WhatsApp later is adding the channel name to
+that config and a `toSms()`/`toWhatsApp()` method per class, no refactor of the 8 existing Notifications
+or their Listeners. Two of the 8 (`SessionReminderNotification`, `ChargeDueSoonNotification`/
+`ChargeOverdueNotification`) are sent by polling console commands
+(`notifications:send-session-reminders` hourly, `notifications:send-charge-reminders` daily — registered/
+scheduled in `NotificationsServiceProvider` exactly like Fase 5's `ApplyLateChargeFees`), not by an Event,
+since a reminder isn't a reaction to something that just happened — idempotency comes from dedicated
+tracking columns (`clinical_sessions.reminder_sent_at`, `financial_charges.due_soon_reminder_sent_at`/
+`overdue_reminder_sent_at`), added via migrations that live in `Modules\Notifications\database\
+migrations` even though they alter Scheduling's/Financial's tables, because the sole reason those columns
+exist is Notifications' own dedup logic. The `database` channel's `notifications` table uses
+`$table->uuidMorphs('notifiable')`, not the framework-default `morphs()` (which generates a
+bigint `notifiable_id`) — same class of fix as `model_has_roles` in Fase 1, needed because `User` has a
+UUID PK. No `tenant_id` on that table on purpose — isolation comes entirely from the
+`$user->notifications()` relation, the same reasoning that already justifies `User` skipping
+`BelongsToTenant`. Cancel/reschedule notify **both** patient and psychologist (`SessionPolicy` already
+lets either one trigger those actions since Fase 3), not just whoever acted. Registration/e-mail
+confirmation deliberately did **not** get folded into this architecture — Fase 1's native
+`MustVerifyEmail`/`sendEmailVerificationNotification()` flow already covers it and refactoring a working,
+tested flow into the new base class for its own sake wasn't worth the risk. `/notificacoes` (list,
+mark-one-read, mark-all-read) plus a `NotificationBell` in `Dashboard.jsx` and a global
+`unreadNotificationsCount` Inertia shared prop (`HandleInertiaRequests`) round out the module; there's no
+shared authenticated layout in this codebase yet (every page still builds its own wrapper), so the bell
+only appears on the Dashboard for now, not on every authenticated page.
+
 **Frontend:** Inertia pages live in `resources/js/Pages` (root) or `Modules/{Name}/resources/js/Pages`
 (per module). shadcn/ui components are copied into `resources/js/components/ui` (lowercase, per the
 shadcn CLI convention — see `components.json`) and customized directly, not installed as a runtime
@@ -405,9 +440,67 @@ back to v2. Flagged here in case there was a specific reason v2 was required.
   probably why. Still do the manual pass every phase regardless — it's cheap insurance, and the absence of
   a finding this time doesn't mean the next new mechanism won't need it.
 
+## Gotchas hit during Fase 7
+
+- **An Inertia shared prop and a page-controller prop with the same top-level key silently collide —
+  the page's own prop wins, the shared one just disappears on that page, no error anywhere.**
+  `HandleInertiaRequests::share()` originally added `'notifications' => ['unreadCount' => ...]`; the new
+  `Notifications/Index` page renders `Inertia::render('Notifications/Index', ['notifications' =>
+  $paginatedList])` — same key. Inertia merges shared + page props with page props taking precedence, so
+  on that one page `props.notifications` became the paginated list and `unreadCount` vanished with no
+  warning; every other page was fine. PHPUnit didn't catch it either (no test asserted the shared prop's
+  shape). Only caught by actually reading the real JSON payload from a live HTTP response during the
+  manual smoke test. Fixed by renaming the shared prop to a flat, unrelated key
+  (`unreadNotificationsCount`) instead of nesting it under `notifications` — the real lesson: **don't
+  give a globally-shared Inertia prop the same top-level key as any page-specific prop, current or
+  future; a flat, specifically-named key is collision-proof by construction, a nested namespace isn't.**
+- **`AvailabilityCalculator` slots are a fixed grid anchored to each rule's `start_time`, not "anything
+  inside the window."** `sliceIntoSlots()` walks from `start_time` in fixed `duration + buffer` steps;
+  a requested `scheduled_at` is only bookable if it lands exactly on one of those computed slot starts.
+  A rule `09:00–12:00` with 50-minute sessions and no buffer only ever produces slots at 9:00, 9:50, and
+  10:40 — booking at 10:00 throws `SlotNoLongerAvailableException` even though 10:00 is well inside the
+  window, because it was simply never a slot in the first place. This isn't new behavior (Fase 3), but
+  it bit the Fase 7 smoke-test script directly (picked an arbitrary round time instead of aligning it to
+  the rule's `start_time`) — when writing ad-hoc booking data for a script/seed, always set the
+  availability rule's `start_time` to exactly the time you intend to book, exactly like the existing
+  PHPUnit tests already do (see `CancelRescheduleSessionTest`), rather than assuming any time within the
+  window works.
+- **`QUEUE_CONNECTION=database` in the real app (vs. `sync` in `phpunit.xml`) means `->notify()` only
+  queues a job — it does not send anything until a worker drains it.** Every `TenantNotification` is
+  `ShouldQueue`, so a manual/tinker-driven smoke test that calls an Action and immediately checks the
+  `notifications` table or the mail log will find nothing, not because the code is broken but because
+  the job is still sitting in the `jobs` table. Run `php artisan queue:work --stop-when-empty` (or
+  `--once` per job) between triggering the action and checking results. PHPUnit never surfaces this
+  because `phpunit.xml` forces `QUEUE_CONNECTION=sync`, executing queued jobs inline — another case
+  (like `runningInConsole()` masking tenant-scope bugs) where the test environment's convenience setting
+  hides real-environment behavior; the manual MySQL pass is what actually exercises the real queue path.
+- **`Illuminate\Notifications\Notifiable`'s `notifications()`/`unreadNotifications()` work out of the
+  box once the `notifications` table exists with the right key type — no custom wiring needed** — but
+  the migration must use `uuidMorphs`, not `morphs` (see architecture note above); getting that wrong
+  wouldn't fail loudly, it would just never match any row (`notifiable_id` type mismatch against a UUID
+  string).
+- **Windows PowerShell 5.1's `Invoke-WebRequest -Method PATCH` is unreliable for this project's manual
+  HTTP smoke tests — it can silently succeed server-side while the client hangs to a 30s timeout, and a
+  literal retry can then report a false `405 Method Not Allowed`** (almost certainly `Invoke-WebRequest`
+  re-issuing the PATCH against whatever `back()` redirected to, rather than the intended URL — a known
+  rough edge in the old .NET Framework HTTP client PowerShell 5.1 runs on, not a bug in the route). Real
+  `curl.exe` (present on this machine at `/mingw64/bin/curl.exe`, i.e. callable from the Bash tool) issued
+  the exact same `PATCH /notificacoes/{id}/lida` request cleanly and got the expected `302`. **For any
+  future manual smoke test that needs a real `PATCH`/`PUT`/`DELETE` against a running `php artisan
+  serve`, reach for `curl.exe` via Bash first, not `Invoke-WebRequest`** — cookie-jar (`-c`/-b`) plus
+  reading the `XSRF-TOKEN` cookie for an `X-XSRF-TOKEN` header reproduces the same session/CSRF handling
+  `Invoke-WebRequest -SessionVariable` gives you, without the verb quirk.
+- **`User::$fillable` not listing `email_verified_at` means a script that does
+  `User::create(['email_verified_at' => now(), ...])` silently drops it, leaving the user unverified** —
+  the exact same class of bug as the Fase 2 `tenant_id`-missing-from-`$fillable` gotcha, rediscovered
+  while hand-writing a smoke-test fixture that (unlike the app's own registration Actions) tried to
+  mass-assign a field the Model doesn't allow. Not a bug in the app itself (no real flow does this), just
+  a reminder that `$fillable` gaps are invisible until something outside the normal Action-built
+  attribute-array path tries to use `create()` directly.
+
 ## What exists vs. what doesn't yet
 
-**Done (Fase 0 through Fase 6):** Laravel + Inertia + React + Tailwind + shadcn/ui wiring; the 18 module
+**Done (Fase 0 through Fase 7):** Laravel + Inertia + React + Tailwind + shadcn/ui wiring; the 18 module
 skeletons; `Tenant` model/scope/middleware; full registration → email verification → login → MFA
 (email OTP + TOTP) → session-timeout-guarded dashboard flow (`Modules\Authentication`); envelope
 encryption primitives (`EnvelopeEncrypted`, `EncryptedJson`, `searchHash`, all in `Modules\Security`);
@@ -420,24 +513,29 @@ content and encrypted file attachments, access derived from treatment history
 (`Modules\MedicalRecords`); charge/payment modeling with installments, discounts, late fees, reversal, and
 a recomputed-not-stored status machine (`Modules\Financial`, `Modules\Payments`); three psychologist
 reports with PDF/Excel export, patient self-service access to sessions/financial situation/receipts, and
-role-aware dashboards (`Modules\Reports`). 114 PHPUnit tests, plus six manual end-to-end passes against
-real MySQL (one per phase — the first five caught real bugs or real gotchas PHPUnit missed, see the
-gotchas sections above — keep doing the manual pass every phase regardless of whether Fase 6 found
-nothing new).
+role-aware dashboards (`Modules\Reports`); domain Events on Scheduling/Financial/Payments consumed by a
+pluggable-channel Notifications module (mail + database today, 8 Notification classes, 2 polling reminder
+commands, `/notificacoes` + unread-count bell) (`Modules\Notifications`). 132 PHPUnit tests, plus seven
+manual end-to-end passes against real MySQL (one per phase — most caught a real bug or a real gotcha
+PHPUnit missed, see the gotchas sections above — keep doing the manual pass every phase regardless of
+whether a given phase turns up nothing new).
 
-**Not built yet:** Notifications, CMS, Settings — those are Fase 7 onward in `docs/06-Roadmap.md`,
-re-evaluate architectural/security/LGPD impact before starting each one. Also not built: admin-facing
-patient list/management UI, psychologist profile editing, Secretária/Financeiro staff invites, guardian
-portal access (Fase 2 deferrals); automatic waiting-list notification when a slot opens (needs Fase 7/
-Notifications), editing/removing an existing availability rule beyond delete, a visual calendar UI for
-booking (Fase 3 deferrals); patient self-service access to their own medical record (Fase 10/LGPD),
-editing/removing a past medical-record version, multiple attachments per entry, automatic `session_id`
-population when a session is marked completed (Fase 4 deferrals); real gateway/PIX integration,
-"abatimento" as a concept distinct from discount (Fase 5 deferrals); asynchronous PDF/Excel export with a
-ready notification (needs Fase 7/Notifications), a dashboard for admin_clinica/financeiro/secretaria, a
-psychologist picker in the report filter UI (the backend already accepts `psychologist_id` via query
-string — there's just no `<select>` yet, since there's no "list psychologists" endpoint to feed it), and
-chart/graph visualizations (Fase 6 deferrals — see its roadmap entry).
+**Not built yet:** CMS, Settings — those are Fase 8 onward in `docs/06-Roadmap.md`, re-evaluate
+architectural/security/LGPD impact before starting each one. Also not built: admin-facing patient
+list/management UI, psychologist profile editing, Secretária/Financeiro staff invites, guardian portal
+access (Fase 2 deferrals); automatic waiting-list notification when a slot opens (the module exists now,
+but nothing wires `waiting_list_entries` to it yet), editing/removing an existing availability rule beyond
+delete, a visual calendar UI for booking (Fase 3 deferrals); patient self-service access to their own
+medical record (Fase 10/LGPD), editing/removing a past medical-record version, multiple attachments per
+entry, automatic `session_id` population when a session is marked completed (Fase 4 deferrals); real
+gateway/PIX integration, "abatimento" as a concept distinct from discount (Fase 5 deferrals);
+asynchronous PDF/Excel export with a ready notification (Notifications now exists, but Reports' exports
+still run synchronously — nobody's revisited that decision yet), a dashboard for
+admin_clinica/financeiro/secretaria, a psychologist picker in the report filter UI (Fase 6 deferrals — see
+its roadmap entry); SMS/WhatsApp notification channels (architecture is ready, no gateway contracted),
+per-user/tenant notification preferences (needs Settings), a notification bell on pages other than
+Dashboard (no shared authenticated layout exists yet to hang it on), a session reminder for the
+psychologist (only the patient gets `SessionReminderNotification` today) (Fase 7 deferrals).
 
 Also not yet in place: `lang/` translation files and the React `t()`/`useTranslation` hook described in
 `docs/05-UIUX-Design-System.md` (pages currently hardcode Portuguese text as a placeholder — don't copy

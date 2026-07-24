@@ -32,6 +32,7 @@ class Session extends Model
         'modality',
         'status',
         'rescheduled_from_id',
+        'reminder_sent_at',
     ];
 
     public function patient()
@@ -56,6 +57,7 @@ class Session extends Model
             'duration_minutes' => 'integer',
             'modality' => SessionModality::class,
             'status' => SessionStatus::class,
+            'reminder_sent_at' => 'datetime',
         ];
     }
 }

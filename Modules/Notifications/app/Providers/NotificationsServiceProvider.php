@@ -4,6 +4,8 @@ namespace Modules\Notifications\Providers;
 
 use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
+use Modules\Notifications\Console\Commands\SendChargeReminders;
+use Modules\Notifications\Console\Commands\SendSessionReminders;
 
 class NotificationsServiceProvider extends ModuleServiceProvider
 {
@@ -22,7 +24,10 @@ class NotificationsServiceProvider extends ModuleServiceProvider
      *
      * @var string[]
      */
-    // protected array $commands = [];
+    protected array $commands = [
+        SendSessionReminders::class,
+        SendChargeReminders::class,
+    ];
 
     /**
      * Provider classes to register.
@@ -36,11 +41,12 @@ class NotificationsServiceProvider extends ModuleServiceProvider
 
     /**
      * Define module schedules.
-     * 
+     *
      * @param $schedule
      */
-    // protected function configureSchedules(Schedule $schedule): void
-    // {
-    //     $schedule->command('inspire')->hourly();
-    // }
+    protected function configureSchedules(Schedule $schedule): void
+    {
+        $schedule->command(SendSessionReminders::class)->hourly();
+        $schedule->command(SendChargeReminders::class)->daily();
+    }
 }

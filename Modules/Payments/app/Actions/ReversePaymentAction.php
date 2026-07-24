@@ -7,6 +7,7 @@ namespace Modules\Payments\Actions;
 use Illuminate\Support\Facades\DB;
 use Modules\Financial\Models\FinancialCharge;
 use Modules\Financial\Services\ChargeStatusCalculator;
+use Modules\Payments\Events\PaymentWasReversed;
 use Modules\Payments\Models\Payment;
 
 class ReversePaymentAction
@@ -24,6 +25,8 @@ class ReversePaymentAction
             $payment->update(['reversed_at' => now()]);
 
             $lockedCharge->update(['status' => $this->calculator->recalculate($lockedCharge)]);
+
+            PaymentWasReversed::dispatch($payment->refresh());
 
             return $payment->refresh();
         });
