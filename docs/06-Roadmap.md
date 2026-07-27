@@ -293,10 +293,47 @@ instalado (sem dados), configuração de ambiente (MySQL, fila database).
   automaticamente; upload de mídia próprio (imagens hoje entram como data-URI via o Asset Manager do
   GrapesJS).
 
-## Fase 9 — Audit/Security hardening
-- Revisão completa de cobertura de auditoria (todas as ações obrigatórias do prompt mestre).
-- Rotação de chaves de criptografia em produção (Job agendado), métricas de autenticação e filas.
-- Cabeçalhos de segurança, rate limiting revisado, testes de concorrência adicionais.
+## Fase 9 — Audit/Security hardening (concluída)
+- **Cabeçalhos de segurança HTTP** (`Modules\Security\Http\Middleware\SecurityHeaders`, anexado ao grupo
+  `web` em `bootstrap/app.php`): CSP, `X-Content-Type-Options: nosniff`, `X-Frame-Options`,
+  `Referrer-Policy`, `Permissions-Policy`, e HSTS **só sobre https** (navegador ignora HSTS em http, e
+  emiti-lo em dev só polui). Tudo configurável em `config/security.php` ('headers'), com toggle
+  `SECURITY_HEADERS_ENABLED`. A CSP mantém `style-src 'unsafe-inline'` (React/shadcn e as páginas
+  públicas do CMS dependem de estilo inline), mas `script-src 'self'` — o bundle Vite é servido do
+  próprio domínio. O middleware não sobrescreve um cabeçalho já definido por uma rota.
+- **Rotação de chaves de criptografia** (fecha a pendência central da Fase 1/ADR-006): `EncryptionService::
+  rotate($context)` aposenta a DEK ativa e cria a próxima versão ativa numa transação com `lockForUpdate`
+  (evita corrida gerar a mesma `version`); dado antigo continua legível pela DEK aposentada (nunca
+  apagada), porque a versão sempre viajou no bundle cifrado desde a Fase 1. `RotateEncryptionKeyJob`
+  recifra o dado antigo em background para a nova versão, descobrindo o(s) atributo(s) do contexto pelo
+  `getCasts()` do Model (registro `security.encryption_contexts` mapeia só contexto→Model, não cada
+  coluna). Comando `php artisan security:rotate-key {context?} {--sync}` orquestra rotação + recifragem.
+  **Fora da recifragem automática (a chave rotaciona, a migração em massa é pendência documentada):**
+  `medical_record_content` (MedicalRecordEntry é append-only, `update()` lança exceção — não dá para
+  recifrar in place) e o blob do arquivo de anexo em disco (cifrado direto pelo `AttachmentStorage`, não
+  por cast).
+- **Cobertura de auditoria** das ações obrigatórias de agenda/financeiro: `Modules\Audit\Listeners\
+  RecordDomainAuditEvents` consome os Events de domínio já disparados desde a Fase 7
+  (`SessionWasCancelled`/`SessionWasRescheduled`/`ChargeWasCreated`/`PaymentWasRecorded`/
+  `PaymentWasReversed`) e grava em `audit_logs` com ação/ator/sujeito/tenant — Audit é consumidor
+  cross-cutting desses eventos, mesma direção de baixo acoplamento que Notifications. Síncrono de
+  propósito (captura IP/User-Agent/ator do contexto da requisição, que enfileirar perderia).
+- **Rate limiting revisado**: os endpoints de exportação de relatório (PDF/Excel dos 3 relatórios) e o
+  download de recibo em PDF ganharam `throttle:30,1` (docs/04-Seguranca.md pede rate limiting em
+  exportação, que estava só em login/MFA/reset até aqui).
+- 168 testes PHPUnit no total (155 das Fases 1-8 + 13 novos), suíte completa verde; verificado
+  manualmente contra MySQL real: comando `security:rotate-key --sync` rotacionando uma DEK e recifrando
+  dado existente, e cabeçalhos de segurança presentes na resposta HTTP com o app ainda carregando normal.
+- **Pendências explícitas desta fase, não bloqueantes:** endurecimento de auditoria na camada de banco
+  (`GRANT INSERT,SELECT` sem `UPDATE`/`DELETE` em `audit_logs` — depende do ambiente Plesk de produção);
+  recifragem em massa de `medical_record_content` (append-only) e dos blobs de anexo em disco na rotação;
+  métricas de autenticação e de fila (dashboard/observabilidade — precisa de backend de métricas, ex.
+  Pulse, ainda não contratado); rotação de DEK por-tenant (hoje os contextos usam DEK global, `tenant_id`
+  nulo); cobertura de auditoria dos demais eventos obrigatórios sem Event de domínio ainda (criação de
+  prontuário, exportação/download em si, publicação/remoção no CMS, exclusão lógica) — a infra
+  (`AuditLogger` + listener) está pronta, falta disparar/escutar esses casos; testes de concorrência
+  adicionais além dos já existentes de `lockForUpdate` (Fases 3/5); runbook de backup/restauração
+  (docs/04-Seguranca.md, depende do pipeline de backup do Plesk).
 
 ## Fase 10 — LGPD
 - Fluxo completo de consentimento, política de privacidade e termos versionados com histórico de

@@ -310,6 +310,28 @@ user-designed HTML, not a React screen: guest routes `GET /c/{tenant:slug}` (hom
 explicit `where('tenant_id')` (same reasoning as public patient registration, Fase 2). Only `publicada`
 pages are served; draft/inactive-tenant → 404.
 
+**Security/Audit hardening (Fase 9, done):** three things. (1) **Security headers** —
+`Modules\Security\Http\Middleware\SecurityHeaders` appended to the `web` group in `bootstrap/app.php`,
+emitting CSP / `X-Content-Type-Options` / `X-Frame-Options` / `Referrer-Policy` / `Permissions-Policy`
+always and HSTS **only over https** (`$request->isSecure()`). Fully config-driven
+(`config/security.php` → `headers`, toggle `SECURITY_HEADERS_ENABLED`); CSP keeps `style-src
+'unsafe-inline'` (React/shadcn + the CMS public Blade pages need inline styles) but `script-src 'self'`.
+It never overwrites a header a route already set. (2) **Encryption key rotation** — closes the Fase
+1/ADR-006 deferral. `EncryptionService::rotate($context)` retires the active DEK and creates the next
+active version in a `lockForUpdate` transaction; old ciphertext stays readable via the retired DEK
+(the version has always travelled inside the bundle). `RotateEncryptionKeyJob` re-encrypts old rows to
+the new version in the background, **auto-discovering which attributes belong to the context from the
+model's `getCasts()`** (registry `security.encryption_contexts` maps context→model only, not columns).
+Command `php artisan security:rotate-key {context?} {--sync}`. **`medical_record_content` and the
+on-disk attachment blobs are deliberately NOT auto-re-encrypted** (MedicalRecordEntry is append-only so
+`update()` throws; the file blob is encrypted by `AttachmentStorage` directly, not a cast) — their keys
+can still rotate, only the bulk migration is deferred. (3) **Audit coverage** —
+`Modules\Audit\Listeners\RecordDomainAuditEvents` consumes the same 5 domain events Notifications does
+(Scheduling cancel/reschedule, Financial charge, Payment record/reverse) and writes `audit_logs` rows;
+it's **synchronous on purpose** (the `AuditLogger` reads actor from `auth()->user()` and IP/UA from
+`Request`, all request-context — queueing would lose them). Plus `throttle:30,1` on report PDF/Excel
+exports and the payment-receipt download (rate limiting was login/MFA/reset only before).
+
 **Frontend:** Inertia pages live in `resources/js/Pages` (root) or `Modules/{Name}/resources/js/Pages`
 (per module). shadcn/ui components are copied into `resources/js/components/ui` (lowercase, per the
 shadcn CLI convention — see `components.json`) and customized directly, not installed as a runtime
@@ -564,9 +586,39 @@ back to v2. Flagged here in case there was a specific reason v2 was required.
   assumes Latin-1 and "Início"/"Sessão" come out corrupted. Confirmed intact by the real-MySQL smoke
   test (the rendered page kept "Bem-vindo" and accented text).
 
+## Gotchas hit during Fase 9
+
+- **Key rotation re-encryption cannot go through `save()` on an append-only model.** The
+  `RotateEncryptionKeyJob` re-encrypts by round-tripping an attribute (`$m->x = $m->x`, get decrypts with
+  the old DEK version, set re-encrypts with the active one) and calling `saveQuietly()`. But
+  `MedicalRecordEntry::update()` is overridden to throw (append-only, Fase 4), so any save on an existing
+  row throws — the round-trip approach is structurally incompatible with it. That's why
+  `medical_record_content` is deliberately absent from `config('security.encryption_contexts')`: the key
+  still rotates (old data stays readable on the retired DEK), only the automatic bulk migration is
+  skipped. Same reasoning for the on-disk attachment blobs (encrypted by `AttachmentStorage` directly,
+  not via a cast, so there's no attribute to round-trip). When a future phase needs those actually
+  migrated, it needs a bespoke path (raw builder write for the append-only row, storage reprocess for
+  the file), not this Job.
+- **Auditing (and anything reading request context) must NOT be `ShouldQueue`.** `AuditLogger` pulls the
+  actor from `auth()->user()` and IP/User-Agent from `Request` — all request-scoped. The Notifications
+  listeners on these exact same events ARE queued (they only need the model), but the audit listener
+  (`RecordDomainAuditEvents`) is intentionally synchronous; queueing it would record null actor/IP. Two
+  listeners on one event with opposite queue semantics is fine and deliberate — don't "consolidate" them.
+- **Re-encrypting one context must not disturb the model's other encrypted columns.** A model like
+  `Patient` has five independent contexts. The Job filters `getCasts()` to attributes ending in exactly
+  `:{context}` and only round-trips those, so rotating `patient_phones` bumps `phones_encrypted` to the
+  new version while `address_encrypted` etc. stay on their own (unchanged) active version — asserted by
+  `RotateEncryptionKeyJobTest::test_job_only_touches_attributes_of_the_rotated_context`. If you widen the
+  attribute match, you'd re-encrypt (and dirty) unrelated columns on every rotation.
+- **A `config/*.php` that imports classes with `use` is fine — Pint will even add the imports for you.**
+  `config/security.php` references model FQCNs in the rotation registry; Pint's `fully_qualified_strict_types`
+  fixer rewrote the inline `\Modules\...::class` into `use` imports at the top of the config file. That's
+  valid (config files are plain PHP) and doesn't interfere with `config:cache`. Don't "fix" it back to
+  inline FQCNs — Pint will just redo it.
+
 ## What exists vs. what doesn't yet
 
-**Done (Fase 0 through Fase 8):** Laravel + Inertia + React + Tailwind + shadcn/ui wiring; the 18 module
+**Done (Fase 0 through Fase 9):** Laravel + Inertia + React + Tailwind + shadcn/ui wiring; the 18 module
 skeletons; `Tenant` model/scope/middleware; full registration → email verification → login → MFA
 (email OTP + TOTP) → session-timeout-guarded dashboard flow (`Modules\Authentication`); envelope
 encryption primitives (`EnvelopeEncrypted`, `EncryptedJson`, `searchHash`, all in `Modules\Security`);
@@ -583,14 +635,16 @@ role-aware dashboards (`Modules\Reports`); domain Events on Scheduling/Financial
 pluggable-channel Notifications module (mail + database today, 8 Notification classes, 2 polling reminder
 commands, `/notificacoes` + unread-count bell) (`Modules\Notifications`); GrapesJS-edited, per-tenant
 public pages with server-side-sanitized HTML/CSS, `manage-cms`-gated admin CRUD, and guest Blade
-rendering at `/c/{tenant:slug}` (`Modules\CMS`). 155 PHPUnit tests, plus eight
+rendering at `/c/{tenant:slug}` (`Modules\CMS`); security-headers middleware, envelope-encryption key
+rotation (`security:rotate-key` + `RotateEncryptionKeyJob`), domain-event audit coverage, and
+export/receipt rate limiting (`Modules\Security`/`Modules\Audit`, Fase 9). 168 PHPUnit tests, plus nine
 manual end-to-end passes against real MySQL (one per phase — most caught a real bug or a real gotcha
 PHPUnit missed, see the gotchas sections above — keep doing the manual pass every phase regardless of
 whether a given phase turns up nothing new).
 
-**Not built yet:** Audit/Security hardening (Fase 9), LGPD flows (Fase 10), SaaS productization (Fase 11),
-and the `Settings` module (no dedicated phase number — built when a phase that needs per-tenant config
-reaches it) remain in `docs/06-Roadmap.md`; re-evaluate architectural/security/LGPD impact before
+**Not built yet:** LGPD flows (Fase 10), SaaS productization (Fase 11), and the `Settings` module (no
+dedicated phase number — built when a phase that needs per-tenant config reaches it) remain in
+`docs/06-Roadmap.md`; re-evaluate architectural/security/LGPD impact before
 starting each one. Also not built: admin-facing patient
 list/management UI, psychologist profile editing, Secretária/Financeiro staff invites, guardian portal
 access (Fase 2 deferrals); automatic waiting-list notification when a slot opens (the module exists now,
@@ -610,7 +664,15 @@ submission of the Formulário/Contato CMS blocks (persistent lead capture needs 
 Fase 10; today Formulário is design-only and Contato uses `mailto:`), code-splitting the GrapesJS editor
 out of the main bundle, an in-admin site preview, CMS page versioning, an auto-generated public nav menu,
 and a dedicated media upload (images currently embed as data-URIs via GrapesJS's Asset Manager) (Fase 8
-deferrals).
+deferrals); DB-level audit hardening (`GRANT INSERT,SELECT` without `UPDATE`/`DELETE` on `audit_logs` —
+Plesk-env dependent), bulk re-encryption of `medical_record_content` (append-only) and on-disk attachment
+blobs on rotation, auth/queue metrics (needs a metrics backend like Pulse), per-tenant DEK rotation
+(contexts use a global `tenant_id`-null DEK today), audit coverage for obligatory actions that still lack
+a domain Event (medical-record creation, the export/download action itself, CMS publish/delete, logical
+deletion — infra ready, just needs the event dispatched/listened), security headers on thrown-exception
+responses (an "append" middleware only decorates the normal return path; 404/403/500 rendered by the
+exception handler skip it — cover those at the web-server layer or with a terminating handler), and a
+backup/restore runbook (Fase 9 deferrals).
 
 Also not yet in place: `lang/` translation files and the React `t()`/`useTranslation` hook described in
 `docs/05-UIUX-Design-System.md` (pages currently hardcode Portuguese text as a placeholder — don't copy

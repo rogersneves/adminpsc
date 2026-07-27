@@ -2,9 +2,10 @@
 
 namespace Modules\Security\Providers;
 
-use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
 use Modules\Security\Console\Commands\GenerateMasterKeyCommand;
+use Modules\Security\Console\Commands\RotateEncryptionKeyCommand;
+use Nwidart\Modules\Support\ModuleServiceProvider;
 
 class SecurityServiceProvider extends ModuleServiceProvider
 {
@@ -25,6 +26,7 @@ class SecurityServiceProvider extends ModuleServiceProvider
      */
     protected array $commands = [
         GenerateMasterKeyCommand::class,
+        RotateEncryptionKeyCommand::class,
     ];
 
     /**
@@ -39,8 +41,8 @@ class SecurityServiceProvider extends ModuleServiceProvider
 
     /**
      * Define module schedules.
-     * 
-     * @param $schedule
+     *
+     * @param  $schedule
      */
     // protected function configureSchedules(Schedule $schedule): void
     // {

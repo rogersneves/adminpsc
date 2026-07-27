@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Modules\Security\Services;
 
+use Illuminate\Support\Facades\DB;
 use Modules\Security\DTOs\DecryptedKey;
 use Modules\Security\Exceptions\DecryptionException;
 use Modules\Security\Models\EncryptionKey;
@@ -13,9 +14,11 @@ use RuntimeException;
  * Envelope encryption: Master Key cifra/decifra Data Encryption Keys (DEK), e cada
  * DEK cifra/decifra os dados de um "contexto" (ex.: mfa_totp_secret) com AES-256-GCM.
  *
- * Escopo desta fase: uma DEK ativa por contexto (+ tenant, quando aplicável), versão 1.
- * Rotação/versionamento avançado fica para a Fase 9 — a versão já viaja no bundle
- * cifrado para que a rotação futura não exija migrar dado existente de uma vez.
+ * Versionamento: cada bundle cifrado carrega a versão da DEK que o cifrou, então dado
+ * antigo continua decifrável por `dekForVersion` mesmo depois de a DEK ativa ser
+ * rotacionada. Rotação (`rotate`, Fase 9) aposenta a DEK ativa e cria a próxima versão
+ * ativa; a partir daí toda nova cifragem usa a nova versão, e o `RotateEncryptionKeyJob`
+ * recifra o dado antigo em background, sem downtime.
  *
  * @see docs/04-Seguranca.md
  */
@@ -100,6 +103,40 @@ class EncryptionService
     }
 
     /**
+     * Rotaciona a DEK de um contexto: aposenta a ativa atual e cria a próxima versão
+     * como ativa. Idempotência não é o objetivo — cada chamada gera uma nova versão.
+     * Dado já cifrado continua legível pela DEK aposentada (mantida, nunca apagada);
+     * a recifragem para a nova versão é feita pelo RotateEncryptionKeyJob.
+     *
+     * Transação + lockForUpdate na(s) linha(s) do contexto evita corrida entre duas
+     * rotações simultâneas gerarem a mesma `version` (viola o unique da tabela).
+     */
+    public function rotate(string $context, ?string $tenantId = null): EncryptionKey
+    {
+        return DB::transaction(function () use ($context, $tenantId): EncryptionKey {
+            $current = EncryptionKey::query()
+                ->where('context', $context)
+                ->where('tenant_id', $tenantId)
+                ->lockForUpdate()
+                ->orderByDesc('version')
+                ->first();
+
+            // Sem chave ainda: rotação a partir do nada é só criar a v1 ativa.
+            if ($current === null) {
+                return $this->createDek($context, $tenantId, 1);
+            }
+
+            EncryptionKey::query()
+                ->where('context', $context)
+                ->where('tenant_id', $tenantId)
+                ->where('status', 'active')
+                ->update(['status' => 'retired', 'retired_at' => now()]);
+
+            return $this->createDek($context, $tenantId, $current->version + 1);
+        });
+    }
+
+    /**
      * Retorna (criando se necessário) a DEK ativa de um contexto, já desembrulhada.
      */
     private function activeDek(string $context, ?string $tenantId): DecryptedKey
@@ -138,14 +175,14 @@ class EncryptionService
         );
     }
 
-    private function createDek(string $context, ?string $tenantId): EncryptionKey
+    private function createDek(string $context, ?string $tenantId, int $version = 1): EncryptionKey
     {
         $dek = random_bytes(32);
 
         return EncryptionKey::query()->create([
             'tenant_id' => $tenantId,
             'context' => $context,
-            'version' => 1,
+            'version' => $version,
             'wrapped_dek' => $this->wrap($dek),
             'status' => 'active',
             'activated_at' => now(),

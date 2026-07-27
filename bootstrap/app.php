@@ -7,6 +7,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Modules\Security\Http\Middleware\EnsureSessionIsValid;
+use Modules\Security\Http\Middleware\SecurityHeaders;
 use Modules\Tenant\Http\Middleware\ResolveTenant;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -19,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             HandleInertiaRequests::class,
             EnsureSessionIsValid::class,
+            SecurityHeaders::class,
         ]);
 
         $middleware->alias([
