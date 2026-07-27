@@ -100,7 +100,8 @@ class TenantSettings
 
         return match ($key) {
             'branding.display_name' => $tenant?->name ?? config('app.name'),
-            'branding.primary_color' => '#4f46e5',
+            // Petróleo da identidade AdminPSC (docs/05); o tenant pode sobrescrever.
+            'branding.primary_color' => '#2d5b7a',
             default => null,
         };
     }

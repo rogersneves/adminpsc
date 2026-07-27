@@ -16,13 +16,46 @@ biblioteca instalada como dependência de runtime — os componentes são copiad
   módulos.
 - `resources/js/Layouts` — layouts por tipo de usuário (ex.: `ClinicLayout`, `PatientPortalLayout`).
 
-## Tokens de tema (Tailwind v4)
+## Tokens de tema (Tailwind v4) — implementados
 
-Definidos via variáveis CSS no tema Tailwind v4 (`@theme` em `resources/css/app.css`), não em classes
-utilitárias espalhadas: cor primária, cor de destaque, cores semânticas (sucesso, aviso, erro, info),
-espaçamento e raio de borda padrão. Preparar desde já para tema por tenant (SaaS): os tokens de cor
-devem poder ser sobrescritos por variáveis CSS injetadas por tenant (ex.: cor da clínica), sem exigir
-rebuild do CSS por cliente.
+Definidos via variáveis CSS no tema Tailwind v4 (`@theme`/`:root`/`.dark` em `resources/css/app.css`),
+não em classes utilitárias espalhadas. Os tokens semânticos do shadcn (`--primary`, `--background`,
+`--card`, `--ring`, ...) estão mapeados para a identidade AdminPSC.
+
+**Paleta (guia de marca):**
+
+| Papel | Token | Claro | Escuro |
+|---|---|---|---|
+| Primária (petróleo) | `--primary` | `#2D5B7A` | `#4F89A8` |
+| Sálvia | `--brand-sage` | `#7FA68A` | `#8FB59A` |
+| Lavanda | `--brand-lavender` | `#A487C8` | `#B79FD6` |
+| Texto | `--foreground` | `#1F2937` | `#F5F7FA` |
+| Texto secundário | `--muted-foreground` | `#5F6875` | `#9AA4B2` |
+| Fundo | `--background` | `#FFFFFF` | `#111827` |
+| Card | `--card` | `#FFFFFF` | `#1F2937` |
+| Borda | `--border` | `#E8ECF0` | `rgba(255,255,255,.08)` |
+| Input | `--input` | `#D7DEE5` | `rgba(255,255,255,.12)` |
+
+**Estados** (utilitários `bg-success`/`text-warning`/...): sucesso `#4CAF6A`, aviso `#E5A73A`, erro
+(`--destructive`) `#D9534F`, info `#5A8DEE`.
+
+**Tipografia:** Manrope (variável, via `@fontsource-variable/manrope`) como `--font-sans` e `--font-heading`.
+Escala: Título 40 · H1 32 · H2 28 · H3 22 · Texto 16 · Legenda 14 · Pequeno 12.
+
+**Raio:** base `--radius: 0.75rem` (12px); a escala `--radius-sm..4xl` deriva dela (cards ~16px,
+elementos maiores ~24px). **Espaçamento:** grade 8pt (múltiplos de 4/8).
+
+**Gráficos:** `--chart-1..5` = petróleo, sálvia, lavanda, âmbar (aviso), azul-info — paleta categórica
+da marca (ver skill `dataviz` ao construir visualizações).
+
+**Tema por tenant (SaaS, Fase 11):** os tokens de cor podem ser sobrescritos em runtime sem rebuild de
+CSS. `branding.primary_color` (prop compartilhada do Inertia, default = petróleo da marca) é injetado em
+`resources/js/app.jsx` como override de `--primary`/`--ring`/`--sidebar-primary` sobre `:root`. Editável
+em `/configuracoes` pelo Admin da Clínica.
+
+**Modo escuro:** ativado pela classe `.dark` no elemento raiz (`@custom-variant dark`); paleta escura
+completa acima (background `#111827`, cards `#1F2937`, primária `#4F89A8`). O toggle de tema em si (persistir
+preferência do usuário) ainda não está construído — os tokens já estão prontos para quando for.
 
 ## Internacionalização (i18n)
 
