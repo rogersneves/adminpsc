@@ -2,8 +2,11 @@
 
 namespace Modules\CMS\Providers;
 
-use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Gate;
+use Modules\CMS\Models\Page;
+use Modules\CMS\Policies\PagePolicy;
+use Nwidart\Modules\Support\ModuleServiceProvider;
 
 class CMSServiceProvider extends ModuleServiceProvider
 {
@@ -34,10 +37,17 @@ class CMSServiceProvider extends ModuleServiceProvider
         RouteServiceProvider::class,
     ];
 
+    public function boot(): void
+    {
+        parent::boot();
+
+        Gate::policy(Page::class, PagePolicy::class);
+    }
+
     /**
      * Define module schedules.
-     * 
-     * @param $schedule
+     *
+     * @param  $schedule
      */
     // protected function configureSchedules(Schedule $schedule): void
     // {

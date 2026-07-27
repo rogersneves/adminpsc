@@ -249,11 +249,49 @@ instalado (sem dados), configuração de ambiente (MySQL, fila database).
   demais páginas autenticadas (só no Dashboard por ora, sem layout compartilhado ainda);
   lembrete de sessão para o psicólogo (só o paciente recebe `SessionReminderNotification` hoje).
 
-## Fase 8 — CMS
-- Páginas públicas editáveis via GrapesJS (`grapesjs-preset-newsletter` como base), interface
-  customizada para aparência clean.
-- Componentes próprios: Banner, Hero, Cards, FAQ, Rodapé, Formulários, Botões, Depoimentos, Contato.
-- Sem edição manual de HTML pelo usuário final.
+## Fase 8 — CMS (concluída)
+- Páginas públicas editáveis num editor visual GrapesJS embutido numa página Inertia/React
+  (`resources/js/Pages/CMS/Editor.jsx`), montado via `useEffect` sobre um `ref` — GrapesJS é vanilla-JS,
+  não React. **Usado `grapesjs-preset-webpage`, não `grapesjs-preset-newsletter` do bullet original**: o
+  preset newsletter é layout de e-mail baseado em tabelas; para páginas web públicas o preset webpage é a
+  escolha tecnicamente correta (diretriz do prompt mestre de resolver ambiguidade para a decisão mais
+  robusta — mesmo espírito do ADR-005). Import de HTML cru desabilitado no editor (`modalImportButton:
+  false`), atendendo ao "sem edição manual de HTML pelo usuário final".
+- Nove componentes próprios registrados como blocos do GrapesJS (`resources/js/cms/blocks.js`), categoria
+  "Componentes da clínica": Banner, Hero, Cards, FAQ, Depoimentos, Botão, Formulário, Contato, Rodapé —
+  cada um com estilo inline clean próprio, para renderizar bem na página pública (Blade puro, sem o bundle
+  Tailwind do app).
+- Model `Page` (`cms_pages`, `BelongsToTenant`, não cifrado — página pública é pública por definição):
+  `slug` único por tenant, `status` (`rascunho`/`publicada`, enum `PageStatus`), `is_home` (só uma inicial
+  por tenant, forçado na Action), `html`/`css` (artefatos já sanitizados servidos ao visitante),
+  `project_data` (estado do editor GrapesJS para reabrir — nunca exposto publicamente), meta título/descrição.
+- **Sanitização defense-in-depth (`Modules\CMS\Services\HtmlSanitizer`) no momento de salvar**, não só na
+  renderização: apesar de o usuário editar por blocos (não digita HTML cru), o HTML gerado é servido em
+  `{!! $html !!}` numa página pública — vetor clássico de stored XSS. Allowlist de tags + atributos via
+  DOMDocument (mais seguro que regex), remove `<script>`/`<iframe>`/handlers `on*`/URLs `javascript:`/
+  `data:text/html`, preservando classes/ids/estilos inline que casam com o blob de CSS. CSS sanitizado à
+  parte (`@import`/`expression()`/`javascript:` removidos). Coberto por `HtmlSanitizerTest`.
+- Gestão admin (`GET/POST/PUT/DELETE /cms/paginas...`, Inertia) restrita à nova permissão `manage-cms`
+  (`super_admin` + `admin_clinica`, seedada — mesmo padrão de `manage-financial` na Fase 5) via
+  `PagePolicy` (`Gate::policy`, aqui o recurso É a Page). Rotas com `resolve.tenant` +
+  `CurrentTenant::ownsOrFail` no Page vindo por binding (disciplina do gotcha da Fase 3).
+- Renderização pública server-side em Blade (`cms::public.show`), **não Inertia** — é HTML desenhado pelo
+  usuário, não uma tela React. Rotas de convidado `GET /c/{tenant:slug}` (página inicial) e
+  `GET /c/{tenant:slug}/p/{pageSlug}` (por slug); tenant resolvido pelo binding `{tenant:slug}` (não há
+  `resolve.tenant` em contexto de convidado), Page buscada à mão com `withoutTenantScope()` +
+  `where('tenant_id')` explícito (mesmo raciocínio do cadastro público de paciente, Fase 2). Só páginas
+  `publicada` são servidas; rascunho/tenant inativo → 404.
+- 155 testes PHPUnit no total (132 das Fases 1-7 + 23 novos), suíte completa verde; verificado
+  manualmente contra MySQL real: `CreatePageAction` executada de verdade com payload XSS (script/
+  `javascript:`/`onclick`/`@import` confirmados removidos no banco), render HTTP público em
+  `php artisan serve` (home 200 com conteúdo/CSS, rascunho e tenant inexistente 404).
+- **Pendências explícitas desta fase, não bloqueantes:** submissão real dos blocos Formulário/Contato
+  (captação de lead persistente exige consentimento LGPD — fica para a Fase 10; hoje o Formulário é
+  design/preview e o Contato usa `mailto:`); code-splitting do editor (GrapesJS entra no bundle principal
+  via o glob eager de `app.jsx`, ~+1MB — o editor deveria ser carregado sob demanda); QR/preview embutido
+  do site no admin; versionamento/histórico de página; menu de navegação entre páginas públicas gerado
+  automaticamente; upload de mídia próprio (imagens hoje entram como data-URI via o Asset Manager do
+  GrapesJS).
 
 ## Fase 9 — Audit/Security hardening
 - Revisão completa de cobertura de auditoria (todas as ações obrigatórias do prompt mestre).

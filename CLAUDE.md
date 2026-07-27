@@ -118,9 +118,11 @@ this codebase builds explicit attribute arrays and never forwards raw request in
 
 **RBAC:** `spatie/laravel-permission`, seeded via `Modules\Authorization\Database\Seeders\
 RolesAndPermissionsSeeder` (called from `DatabaseSeeder`). 7 roles: `super_admin`, `admin_clinica`,
-`psicologo`, `secretaria`, `financeiro`, `paciente`, `responsavel_legal`. Only `super_admin` and
-`admin_clinica` have permissions assigned so far (`manage-users`, `manage-clinic-settings`,
-`view-audit-log`, `platform.manage-tenants`) — the rest earn permissions as their modules ship.
+`psicologo`, `secretaria`, `financeiro`, `paciente`, `responsavel_legal`. Seeded permissions:
+`super_admin` gets all (`manage-users`, `manage-clinic-settings`, `view-audit-log`,
+`platform.manage-tenants`, `manage-financial`, `manage-cms`); `admin_clinica` gets all but
+`platform.manage-tenants`; `financeiro` gets `manage-financial` (Fase 5); `manage-cms` (Fase 8) is on
+`super_admin`/`admin_clinica`. The remaining roles earn permissions as their modules ship.
 
 **Authentication flow (Fase 1, done):** registration (`POST /register`) creates a `Tenant` + `User`
 (role `admin_clinica`) and logs the user in immediately without MFA (see the ADR-style comment in
@@ -279,6 +281,34 @@ mark-one-read, mark-all-read) plus a `NotificationBell` in `Dashboard.jsx` and a
 `unreadNotificationsCount` Inertia shared prop (`HandleInertiaRequests`) round out the module; there's no
 shared authenticated layout in this codebase yet (every page still builds its own wrapper), so the bell
 only appears on the Dashboard for now, not on every authenticated page.
+
+**CMS (Fase 8, done):** tenant-scoped public pages (`Modules\CMS\Models\Page`, table `cms_pages`,
+`BelongsToTenant`, **not encrypted** — a public page is public by definition, no PII at rest) edited in a
+GrapesJS visual builder embedded in an Inertia/React page (`resources/js/Pages/CMS/Editor.jsx`, GrapesJS
+mounted in a `useEffect` over a ref — it's vanilla-JS, not React). Uses `grapesjs-preset-webpage`, **not
+the `grapesjs-preset-newsletter`** named in the roadmap (newsletter is table-based email layout; webpage
+is the correct preset for public web pages — same "resolve ambiguity toward the robust decision" call as
+ADR-005). Nine custom blocks (`resources/js/cms/blocks.js`: Banner, Hero, Cards, FAQ, Depoimentos, Botão,
+Formulário, Contato, Rodapé), each with self-contained inline styles so they render cleanly on the public
+page (plain Blade, **not** the app's Tailwind bundle). Raw-HTML import is disabled in the editor
+(`modalImportButton: false`) per the roadmap's "no manual HTML editing." A page stores `html`/`css` (the
+sanitized publish artifacts served to visitors) separately from `project_data` (the GrapesJS editor state
+for reopening — never exposed publicly); `slug` is unique per tenant, `status` is `PageStatus`
+(`rascunho`/`publicada`), `is_home` is enforced single-per-tenant in the Action. **HTML/CSS is sanitized
+on save (not just on render) by `Modules\CMS\Services\HtmlSanitizer`** — defense-in-depth stored-XSS
+barrier: even though users edit via blocks (no raw HTML), the output is served in `{!! $html !!}` on a
+public page. Allowlist of tags+attributes via DOMDocument (safer than regex), strips
+`<script>`/`<iframe>`/`on*` handlers/`javascript:` & `data:text/html` URLs while preserving the
+classes/ids/inline-styles that pair with the CSS blob; CSS sanitized separately (`@import`/`expression()`/
+`javascript:` removed). Admin CRUD (`/cms/paginas...`, Inertia) is gated by the new `manage-cms`
+permission via `PagePolicy` (registered with `Gate::policy` — here the resource **is** the `Page`, unlike
+the `(User, Patient)`-pair policies of Fases 4/5) plus `resolve.tenant` + `CurrentTenant::ownsOrFail` on
+the bound `Page`. Public rendering is **server-side Blade** (`cms::public.show`), **not Inertia** — it's
+user-designed HTML, not a React screen: guest routes `GET /c/{tenant:slug}` (home) and
+`GET /c/{tenant:slug}/p/{pageSlug}` (by slug), tenant resolved via `{tenant:slug}` binding (no
+`resolve.tenant` in guest context), `Page` queried manually with `withoutTenantScope()` +
+explicit `where('tenant_id')` (same reasoning as public patient registration, Fase 2). Only `publicada`
+pages are served; draft/inactive-tenant → 404.
 
 **Frontend:** Inertia pages live in `resources/js/Pages` (root) or `Modules/{Name}/resources/js/Pages`
 (per module). shadcn/ui components are copied into `resources/js/components/ui` (lowercase, per the
@@ -498,9 +528,45 @@ back to v2. Flagged here in case there was a specific reason v2 was required.
   a reminder that `$fillable` gaps are invisible until something outside the normal Action-built
   attribute-array path tries to use `create()` directly.
 
+## Gotchas hit during Fase 8
+
+- **A stale `php artisan serve` from a previous session, still holding a port, silently serves OLD code
+  and makes every new route 404 — indistinguishable from a real routing bug.** The Fase 8 manual smoke
+  test 404'd on `/c/{tenant:slug}` AND on the Fase 2 patient-registration route that had worked for
+  phases, yet `app('router')->getRoutes()->match($request)` in a fresh `tinker` matched both correctly.
+  The tell: routing works in a fresh CLI bootstrap but 404s over HTTP → the HTTP server is running
+  different (older) code than your files. Cause here was a leftover `serve` process bound to the port
+  from an earlier session; a new `serve` on the same port either loses the bind or you're hitting the old
+  one. **Before trusting a `serve`-based smoke test, confirm the server has your new routes** (hit a
+  route that only exists on this branch and expect its real status, e.g. `/cms/paginas` → `302`, not
+  `404`), or just start on a fresh port and kill stray `php.exe` first. This is the same class as the
+  Fase 6 `composer dev`/`pail` note — the WAMP/Windows dev-server story is where these bite.
+- **A skeleton module route (`Route::resource(...)`/`apiResource(...)` pointing at a controller that was
+  later deleted) breaks `php artisan route:list` globally, not just its own row.** `route:list`
+  eagerly reflects every route's controller class; one missing class throws `ReflectionException` and
+  aborts the whole listing. Several untouched module skeletons still have these (`Modules\Audit`'s
+  `AuditController` is the one that surfaced). It does **not** affect the running app (string controllers
+  are resolved lazily, only on hit), so it's latent tech debt, not a live bug — but it means `route:list`
+  is unusable until those are cleaned. To inspect routes meanwhile, iterate `app('router')->getRoutes()`
+  in `tinker` and read `->uri()`/`->getName()` (doesn't reflect controllers). CMS's own skeleton
+  (`CMSController` + its `cms` resource/apiResource routes) was removed as part of this phase.
+- **GrapesJS lands in the main JS bundle because `app.jsx` globs pages with `{ eager: true }`.** Every
+  page under `resources/js/Pages` is imported eagerly into one bundle, so importing `grapesjs` +
+  `grapesjs-preset-webpage` in `CMS/Editor.jsx` pushed the shared `app-*.js` from a few hundred KB to
+  ~1.5MB (421KB gzip) — it now loads on every page, not just the editor. Not fixed this phase (making the
+  glob lazy is an app-wide change touching every page's load behavior); flagged as a deferral. If bundle
+  size becomes a real problem, the targeted fix is a dynamic `import()` for the editor, not flipping the
+  whole glob to lazy.
+- **`DOMDocument` needs an explicit UTF-8 hint or it mangles accented content**, which matters because
+  the UI is Portuguese. `HtmlSanitizer::sanitizeHtml` prepends `<?xml encoding="UTF-8">` and loads with
+  `LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD` (so it doesn't inject `<html><body>` wrappers) inside a
+  known `<div id="__cms_root__">` sentinel it then unwraps — without the encoding hint, `loadHTML`
+  assumes Latin-1 and "Início"/"Sessão" come out corrupted. Confirmed intact by the real-MySQL smoke
+  test (the rendered page kept "Bem-vindo" and accented text).
+
 ## What exists vs. what doesn't yet
 
-**Done (Fase 0 through Fase 7):** Laravel + Inertia + React + Tailwind + shadcn/ui wiring; the 18 module
+**Done (Fase 0 through Fase 8):** Laravel + Inertia + React + Tailwind + shadcn/ui wiring; the 18 module
 skeletons; `Tenant` model/scope/middleware; full registration → email verification → login → MFA
 (email OTP + TOTP) → session-timeout-guarded dashboard flow (`Modules\Authentication`); envelope
 encryption primitives (`EnvelopeEncrypted`, `EncryptedJson`, `searchHash`, all in `Modules\Security`);
@@ -515,13 +581,17 @@ a recomputed-not-stored status machine (`Modules\Financial`, `Modules\Payments`)
 reports with PDF/Excel export, patient self-service access to sessions/financial situation/receipts, and
 role-aware dashboards (`Modules\Reports`); domain Events on Scheduling/Financial/Payments consumed by a
 pluggable-channel Notifications module (mail + database today, 8 Notification classes, 2 polling reminder
-commands, `/notificacoes` + unread-count bell) (`Modules\Notifications`). 132 PHPUnit tests, plus seven
+commands, `/notificacoes` + unread-count bell) (`Modules\Notifications`); GrapesJS-edited, per-tenant
+public pages with server-side-sanitized HTML/CSS, `manage-cms`-gated admin CRUD, and guest Blade
+rendering at `/c/{tenant:slug}` (`Modules\CMS`). 155 PHPUnit tests, plus eight
 manual end-to-end passes against real MySQL (one per phase — most caught a real bug or a real gotcha
 PHPUnit missed, see the gotchas sections above — keep doing the manual pass every phase regardless of
 whether a given phase turns up nothing new).
 
-**Not built yet:** CMS, Settings — those are Fase 8 onward in `docs/06-Roadmap.md`, re-evaluate
-architectural/security/LGPD impact before starting each one. Also not built: admin-facing patient
+**Not built yet:** Audit/Security hardening (Fase 9), LGPD flows (Fase 10), SaaS productization (Fase 11),
+and the `Settings` module (no dedicated phase number — built when a phase that needs per-tenant config
+reaches it) remain in `docs/06-Roadmap.md`; re-evaluate architectural/security/LGPD impact before
+starting each one. Also not built: admin-facing patient
 list/management UI, psychologist profile editing, Secretária/Financeiro staff invites, guardian portal
 access (Fase 2 deferrals); automatic waiting-list notification when a slot opens (the module exists now,
 but nothing wires `waiting_list_entries` to it yet), editing/removing an existing availability rule beyond
@@ -535,7 +605,12 @@ admin_clinica/financeiro/secretaria, a psychologist picker in the report filter 
 its roadmap entry); SMS/WhatsApp notification channels (architecture is ready, no gateway contracted),
 per-user/tenant notification preferences (needs Settings), a notification bell on pages other than
 Dashboard (no shared authenticated layout exists yet to hang it on), a session reminder for the
-psychologist (only the patient gets `SessionReminderNotification` today) (Fase 7 deferrals).
+psychologist (only the patient gets `SessionReminderNotification` today) (Fase 7 deferrals); live
+submission of the Formulário/Contato CMS blocks (persistent lead capture needs LGPD consent — deferred to
+Fase 10; today Formulário is design-only and Contato uses `mailto:`), code-splitting the GrapesJS editor
+out of the main bundle, an in-admin site preview, CMS page versioning, an auto-generated public nav menu,
+and a dedicated media upload (images currently embed as data-URIs via GrapesJS's Asset Manager) (Fase 8
+deferrals).
 
 Also not yet in place: `lang/` translation files and the React `t()`/`useTranslation` hook described in
 `docs/05-UIUX-Design-System.md` (pages currently hardcode Portuguese text as a placeholder — don't copy
