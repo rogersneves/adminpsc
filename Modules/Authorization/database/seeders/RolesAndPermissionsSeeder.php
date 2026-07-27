@@ -33,6 +33,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'platform.manage-tenants',
         'manage-financial',
         'manage-cms',
+        'manage-legal',
     ];
 
     public function run(): void
@@ -59,6 +60,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'manage-financial',
             // Gestão das páginas públicas do CMS (Fase 8) — concern do dono da clínica.
             'manage-cms',
+            // Gestão dos documentos legais / LGPD (Fase 10).
+            'manage-legal',
         ]);
 
         // Primeira permissão real do papel `financeiro` (seedado desde a Fase 1, sem

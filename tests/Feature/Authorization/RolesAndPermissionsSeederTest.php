@@ -43,6 +43,7 @@ class RolesAndPermissionsSeederTest extends TestCase
             'platform.manage-tenants',
             'manage-financial',
             'manage-cms',
+            'manage-legal',
         ], $superAdmin->permissions->pluck('name')->all());
     }
 
@@ -58,6 +59,7 @@ class RolesAndPermissionsSeederTest extends TestCase
             'view-audit-log',
             'manage-financial',
             'manage-cms',
+            'manage-legal',
         ], $adminClinica->permissions->pluck('name')->all());
     }
 

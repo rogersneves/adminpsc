@@ -84,6 +84,16 @@ Tabela `audit_logs` é **append-only por design**:
   exigir e após todas as obrigações de retenção (financeira, clínica, conforme CFP) serem satisfeitas —
   processo documentado, não automático.
 
+> **Status de implementação (Fase 10):** o fluxo acima está implementado no módulo `Security`, namespace
+> `Lgpd`. Documentos legais versionados (`legal_documents`, `PublishLegalDocumentAction` — nova versão
+> nunca sobrescreve), aceite append-only (`lgpd_consents`, Model `Consent`), gating de re-consentimento
+> (`EnsureLgpdConsent`, opt-in por tenant), direito de acesso/portabilidade Art. 18 (`/lgpd/meus-dados`
+> + download JSON, `BuildPersonalDataExportAction`) e anonimização irreversível
+> (`AnonymizePatientAction` + `php artisan lgpd:anonymize-patient`). Auditado via `AuditLogger`
+> (`lgpd.consent_recorded`, `lgpd.data_exported`, `lgpd.patient_anonymized`,
+> `lgpd.legal_document_published`). Pendências (exclusão física pós-retenção, PDF do "meus dados",
+> anonimização em lote, expurgo do prontuário append-only) em `docs/06-Roadmap.md` (Fase 10).
+
 ## Backup
 
 - Backups incluem os dados já cifrados em repouso (o backup nunca decifra) — logo, a Master Key e as

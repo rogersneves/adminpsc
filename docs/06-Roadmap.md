@@ -335,9 +335,43 @@ instalado (sem dados), configuração de ambiente (MySQL, fila database).
   adicionais além dos já existentes de `lockForUpdate` (Fases 3/5); runbook de backup/restauração
   (docs/04-Seguranca.md, depende do pipeline de backup do Plesk).
 
-## Fase 10 — LGPD
-- Fluxo completo de consentimento, política de privacidade e termos versionados com histórico de
-  aceite, anonimização e exclusão conforme legislação e normas do CFP.
+## Fase 10 — LGPD (concluída)
+- Vive no módulo `Security` (docs/04-Seguranca.md documenta LGPD dentro de Segurança) sob o namespace
+  `Lgpd`, em vez de criar um 19º módulo.
+- **Documentos legais versionados por tenant** (`legal_documents`, `BelongsToTenant`, tipos
+  `privacy_policy`/`terms_of_use` no enum `LegalDocumentType`): publicar uma nova versão
+  (`PublishLegalDocumentAction`) nunca sobrescreve — cria a próxima `version` como `is_current` e aposenta
+  a anterior (histórico preservado). Gestão em `/lgpd/documentos...` restrita à nova permissão
+  `manage-legal` (`super_admin`/`admin_clinica`).
+- **Registro de aceite append-only** (`lgpd_consents`, Model `Consent` com `update()`/`delete()` lançando
+  exceção, mesmo padrão de `AuditLog`): `RecordConsentAction` grava tipo, versão aceita, data/hora, IP e
+  User-Agent — a prova de consentimento. Auditado (`lgpd.consent_recorded`).
+- **Gating de re-consentimento** (`EnsureLgpdConsent`, no grupo `web`): se o tenant tem uma versão atual
+  de documento obrigatório que o usuário ainda não aceitou (`ConsentChecker`), redireciona para
+  `/lgpd/consentimento` antes de qualquer ação. Publicar uma nova versão invalida o aceite anterior e
+  reexige o aceite automaticamente. **Opt-in por clínica**: se o tenant não publicou documento nenhum, é
+  no-op — não força consentimento sobre o vazio nem quebra fluxos existentes.
+- **Direito de acesso/portabilidade (Art. 18)** — fecha a pendência da Fase 4: `GET /lgpd/meus-dados`
+  (tela) e `/lgpd/meus-dados/download` (JSON) montam o pacote de dados do próprio titular
+  (`BuildPersonalDataExportAction`: conta, perfil decifrado, responsáveis, sessões, cobranças,
+  consentimentos). O download é uma exportação auditada (`lgpd.data_exported`) e rate-limited.
+- **Anonimização irreversível** (`AnonymizePatientAction` + `php artisan lgpd:anonymize-patient {id}
+  --force`): substitui a PII do paciente por marcadores, apaga campos cifrados/hashes, marca
+  `anonymized_at`, faz soft-delete e cascateia para responsáveis e para a conta de login — mantendo a
+  linha para as obrigações de retenção (vínculo com sessões/cobranças), sem dado identificável. Auditado
+  (`lgpd.patient_anonymized`), idempotente, processo manual e explícito (exige `--force`).
+- 184 testes PHPUnit no total (168 das Fases 1-9 + 16 novos), suíte completa verde; verificado
+  manualmente contra MySQL real: publicação de documento → `pendingFor` 1 → aceite → `pendingFor` 0;
+  `lgpd:anonymize-patient --force` limpando a PII (nome vira marcador, documento nulo, `anonymized_at`
+  setado, soft-delete); e o app carregando normal com o novo middleware na cadeia.
+- **Pendências explícitas desta fase, não bloqueantes:** exclusão física pós-retenção (hoje só soft-delete
+  + anonimização; a exclusão física definitiva conforme prazos de retenção do CFP fica como processo
+  manual documentado, não automático); integração do consentimento com os blocos Formulário/Contato do
+  CMS (Fase 8) para captação de lead com base legal; anonimização em lote / por critério de retenção
+  (hoje é um paciente por vez); versão pública dos documentos legais servida na página do CMS; exportação
+  do "meus dados" em PDF além do JSON; expurgo do `medical_record_content` na anonimização (o prontuário
+  é append-only e cifrado — a exclusão/anonimização do conteúdo clínico exige processo dedicado, alinhado
+  ao mesmo deferral de recifragem da Fase 9).
 
 ## Fase 11 — Produtização SaaS
 - Onboarding de novo tenant, planos/billing, personalização por tenant (tema, configurações),

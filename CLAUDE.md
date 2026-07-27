@@ -120,9 +120,10 @@ this codebase builds explicit attribute arrays and never forwards raw request in
 RolesAndPermissionsSeeder` (called from `DatabaseSeeder`). 7 roles: `super_admin`, `admin_clinica`,
 `psicologo`, `secretaria`, `financeiro`, `paciente`, `responsavel_legal`. Seeded permissions:
 `super_admin` gets all (`manage-users`, `manage-clinic-settings`, `view-audit-log`,
-`platform.manage-tenants`, `manage-financial`, `manage-cms`); `admin_clinica` gets all but
-`platform.manage-tenants`; `financeiro` gets `manage-financial` (Fase 5); `manage-cms` (Fase 8) is on
-`super_admin`/`admin_clinica`. The remaining roles earn permissions as their modules ship.
+`platform.manage-tenants`, `manage-financial`, `manage-cms`, `manage-legal`); `admin_clinica` gets all
+but `platform.manage-tenants`; `financeiro` gets `manage-financial` (Fase 5). `manage-cms` (Fase 8) and
+`manage-legal` (Fase 10, LGPD documents) are on `super_admin`/`admin_clinica`. The remaining roles earn
+permissions as their modules ship.
 
 **Authentication flow (Fase 1, done):** registration (`POST /register`) creates a `Tenant` + `User`
 (role `admin_clinica`) and logs the user in immediately without MFA (see the ADR-style comment in
@@ -331,6 +332,33 @@ can still rotate, only the bulk migration is deferred. (3) **Audit coverage** �
 it's **synchronous on purpose** (the `AuditLogger` reads actor from `auth()->user()` and IP/UA from
 `Request`, all request-context — queueing would lose them). Plus `throttle:30,1` on report PDF/Excel
 exports and the payment-receipt download (rate limiting was login/MFA/reset only before).
+
+**LGPD (Fase 10, done):** lives in `Modules\Security` under an `Lgpd` namespace (docs/04 documents LGPD
+inside the Security chapter — no 19th module invented). Four pieces. (1) **Versioned legal documents** —
+`LegalDocument` (`legal_documents`, `BelongsToTenant`, types `privacy_policy`/`terms_of_use` via
+`LegalDocumentType`): `PublishLegalDocumentAction` never edits in place — it creates the next `version`
+as `is_current` and retires the prior (history preserved), gated by the new `manage-legal` permission.
+(2) **Append-only consent** — `Consent` (`lgpd_consents`, `update()`/`delete()` throw like `AuditLog`;
+**note `protected $table = 'lgpd_consents'`** since the class is `Consent`); `RecordConsentAction` stores
+type/version/timestamp/IP/UA and audits `lgpd.consent_recorded`. (3) **Re-consent gating** —
+`EnsureLgpdConsent` appended to the `web` group: if the user's tenant has an `is_current` required
+document they haven't accepted (`ConsentChecker`), redirect to `/lgpd/consentimento`. **Opt-in per
+clinic**: no current document → no-op, so it doesn't touch existing flows/tests (none seed documents).
+Publishing a new version silently re-triggers gating (the accepted version is no longer current). The
+gating middleware exempts by **path** (`lgpd/consentimento`, `logout`, `login`, `email/verify*`) not
+`routeIs()` — group middleware can run before the route is fully resolved. **A subtle consequence: an
+admin who publishes the first legal document is then gated by their own document on the very next
+request** — correct behaviour, but it means the "publish twice over HTTP" path can't reach the second
+publish without accepting in between (the supersede test drives `PublishLegalDocumentAction` directly for
+that reason). (4) **Art. 18 access/portability** (closes the Fase 4 deferral) — `/lgpd/meus-dados` +
+`/lgpd/meus-dados/download` build the subject's own data via `BuildPersonalDataExportAction` (decrypted
+PII + sessions + charges + consents), the download audited (`lgpd.data_exported`) and throttled. Plus
+**irreversible anonymization** — `AnonymizePatientAction` + `php artisan lgpd:anonymize-patient {id}
+--force` replaces PII with markers, nulls encrypted columns/hashes, stamps `anonymized_at` (new column
+added to `patients` by a Security-module migration, Fase-7 precedent), soft-deletes, and cascades to
+guardians + the login account, keeping the row for retention duties; audited `lgpd.patient_anonymized`,
+idempotent. Note `medical_record_content` is deliberately left out of anonymization (append-only +
+encrypted — same class of deferral as the Fase 9 rotation).
 
 **Frontend:** Inertia pages live in `resources/js/Pages` (root) or `Modules/{Name}/resources/js/Pages`
 (per module). shadcn/ui components are copied into `resources/js/components/ui` (lowercase, per the
@@ -616,9 +644,38 @@ back to v2. Flagged here in case there was a specific reason v2 was required.
   valid (config files are plain PHP) and doesn't interfere with `config:cache`. Don't "fix" it back to
   inline FQCNs — Pint will just redo it.
 
+## Gotchas hit during Fase 10
+
+- **A model whose class name doesn't match its table needs `$table` — and the failure only shows at
+  runtime, never in a green unit test.** `Consent` maps to `consents` by convention, but the table is
+  `lgpd_consents` (namespaced with the rest of the LGPD schema). Missing `protected $table` surfaced as
+  `SQLSTATE… no such table: consents` — but only through the HTTP path, because the global
+  `EnsureLgpdConsent` middleware is the first thing that queries `Consent` on a real request. The model
+  itself instantiates fine; nothing complains until a query runs. Set `$table` whenever the table name
+  isn't the plural of the class.
+- **A global consent-gating middleware makes the admin who publishes a legal document its own first
+  gated user.** After `PublishLegalDocumentAction` creates the first `is_current` document, that admin's
+  next request has an unaccepted required document, so `EnsureLgpdConsent` redirects them to the consent
+  screen. This is correct, but it means an end-to-end "publish v1 then publish v2 over HTTP" flow can't
+  reach the second publish — the second request 302s to `/lgpd/consentimento` instead. Tests that need to
+  exercise multi-version behaviour drive `PublishLegalDocumentAction` directly rather than through two
+  HTTP posts (see `LegalDocumentPublishingTest::test_publishing_again_supersedes_the_current_version`).
+- **Group middleware can run before the route is resolved, so gate on `$request->is(path)`, not
+  `routeIs()`.** `EnsureLgpdConsent` is appended to the `web` group and must exempt the consent screen,
+  logout, and login to avoid a redirect loop. `$request->routeIs('lgpd.consent.*')` is unreliable there
+  (the route binding may not be attached yet at that point in the pipeline); path matching
+  (`$request->is('lgpd/consentimento')`) is always available and is what the middleware uses.
+- **The consent gate is deliberately opt-in per tenant, which is also why it didn't break the other 168
+  tests.** `ConsentChecker::pendingFor` only considers documents that actually exist and are
+  `is_current`; a tenant with no published documents yields an empty pending list, so the middleware is a
+  no-op. That's both the intended product behaviour (a clinic that hasn't written a privacy policy isn't
+  forced to) and the reason adding a global `web` middleware didn't cascade failures across the suite —
+  no existing test seeds a `legal_documents` row. If you ever make consent mandatory-by-default, expect
+  to touch a lot of tests.
+
 ## What exists vs. what doesn't yet
 
-**Done (Fase 0 through Fase 9):** Laravel + Inertia + React + Tailwind + shadcn/ui wiring; the 18 module
+**Done (Fase 0 through Fase 10):** Laravel + Inertia + React + Tailwind + shadcn/ui wiring; the 18 module
 skeletons; `Tenant` model/scope/middleware; full registration → email verification → login → MFA
 (email OTP + TOTP) → session-timeout-guarded dashboard flow (`Modules\Authentication`); envelope
 encryption primitives (`EnvelopeEncrypted`, `EncryptedJson`, `searchHash`, all in `Modules\Security`);
@@ -637,12 +694,15 @@ commands, `/notificacoes` + unread-count bell) (`Modules\Notifications`); Grapes
 public pages with server-side-sanitized HTML/CSS, `manage-cms`-gated admin CRUD, and guest Blade
 rendering at `/c/{tenant:slug}` (`Modules\CMS`); security-headers middleware, envelope-encryption key
 rotation (`security:rotate-key` + `RotateEncryptionKeyJob`), domain-event audit coverage, and
-export/receipt rate limiting (`Modules\Security`/`Modules\Audit`, Fase 9). 168 PHPUnit tests, plus nine
+export/receipt rate limiting (`Modules\Security`/`Modules\Audit`, Fase 9); versioned per-tenant legal
+documents, append-only consent with global re-consent gating, Art. 18 self-service data
+access/portability, and irreversible patient anonymization (`Modules\Security` `Lgpd` namespace, Fase 10).
+184 PHPUnit tests, plus ten
 manual end-to-end passes against real MySQL (one per phase — most caught a real bug or a real gotcha
 PHPUnit missed, see the gotchas sections above — keep doing the manual pass every phase regardless of
 whether a given phase turns up nothing new).
 
-**Not built yet:** LGPD flows (Fase 10), SaaS productization (Fase 11), and the `Settings` module (no
+**Not built yet:** SaaS productization (Fase 11) and the `Settings` module (no
 dedicated phase number — built when a phase that needs per-tenant config reaches it) remain in
 `docs/06-Roadmap.md`; re-evaluate architectural/security/LGPD impact before
 starting each one. Also not built: admin-facing patient
@@ -672,7 +732,13 @@ a domain Event (medical-record creation, the export/download action itself, CMS 
 deletion — infra ready, just needs the event dispatched/listened), security headers on thrown-exception
 responses (an "append" middleware only decorates the normal return path; 404/403/500 rendered by the
 exception handler skip it — cover those at the web-server layer or with a terminating handler), and a
-backup/restore runbook (Fase 9 deferrals).
+backup/restore runbook (Fase 9 deferrals); physical post-retention deletion (only soft-delete +
+anonymization exist; definitive physical erasure per CFP retention windows stays a documented manual
+process), wiring LGPD consent into the CMS Formulário/Contato blocks for lawful lead capture, batch/
+retention-driven anonymization (one patient at a time today), a public-facing view of the current legal
+documents on the CMS site, PDF (not just JSON) "my data" export, and anonymization/erasure of
+`medical_record_content` (append-only + encrypted — needs a dedicated process, same class as the Fase 9
+rotation deferral) (Fase 10 deferrals).
 
 Also not yet in place: `lang/` translation files and the React `t()`/`useTranslation` hook described in
 `docs/05-UIUX-Design-System.md` (pages currently hardcode Portuguese text as a placeholder — don't copy

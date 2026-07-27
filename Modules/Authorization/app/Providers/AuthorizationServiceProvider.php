@@ -2,12 +2,12 @@
 
 namespace Modules\Authorization\Providers;
 
-use Illuminate\Support\Facades\Gate;
-use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Gate;
 use Modules\Authorization\Console\Commands\MakeSuperAdminCommand;
 use Modules\Authorization\Policies\UserPolicy;
 use Modules\Users\Models\User;
+use Nwidart\Modules\Support\ModuleServiceProvider;
 
 class AuthorizationServiceProvider extends ModuleServiceProvider
 {
@@ -51,8 +51,8 @@ class AuthorizationServiceProvider extends ModuleServiceProvider
 
     /**
      * Define module schedules.
-     * 
-     * @param $schedule
+     *
+     * @param  $schedule
      */
     // protected function configureSchedules(Schedule $schedule): void
     // {

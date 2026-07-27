@@ -3,6 +3,7 @@
 namespace Modules\Security\Providers;
 
 use Illuminate\Console\Scheduling\Schedule;
+use Modules\Security\Console\Commands\AnonymizePatientCommand;
 use Modules\Security\Console\Commands\GenerateMasterKeyCommand;
 use Modules\Security\Console\Commands\RotateEncryptionKeyCommand;
 use Nwidart\Modules\Support\ModuleServiceProvider;
@@ -27,6 +28,7 @@ class SecurityServiceProvider extends ModuleServiceProvider
     protected array $commands = [
         GenerateMasterKeyCommand::class,
         RotateEncryptionKeyCommand::class,
+        AnonymizePatientCommand::class,
     ];
 
     /**

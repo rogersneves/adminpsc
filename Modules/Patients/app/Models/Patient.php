@@ -28,6 +28,7 @@ class Patient extends Model
         'phones_encrypted',
         'emergency_contacts_encrypted',
         'address_encrypted',
+        'anonymized_at',
     ];
 
     public function user()
@@ -48,6 +49,7 @@ class Patient extends Model
             'address_encrypted' => EnvelopeEncrypted::class.':patient_address',
             'phones_encrypted' => EncryptedJson::class.':patient_phones',
             'emergency_contacts_encrypted' => EncryptedJson::class.':patient_emergency_contacts',
+            'anonymized_at' => 'datetime',
         ];
     }
 }
