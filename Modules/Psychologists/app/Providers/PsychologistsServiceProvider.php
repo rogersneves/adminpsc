@@ -2,13 +2,13 @@
 
 namespace Modules\Psychologists\Providers;
 
-use Illuminate\Support\Facades\Gate;
-use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Gate;
 use Modules\Psychologists\Models\Psychologist;
 use Modules\Psychologists\Models\PsychologistAvailability;
 use Modules\Psychologists\Policies\PsychologistAvailabilityPolicy;
 use Modules\Psychologists\Policies\PsychologistPolicy;
+use Nwidart\Modules\Support\ModuleServiceProvider;
 
 class PsychologistsServiceProvider extends ModuleServiceProvider
 {
@@ -50,7 +50,7 @@ class PsychologistsServiceProvider extends ModuleServiceProvider
     /**
      * Define module schedules.
      *
-     * @param $schedule
+     * @param  $schedule
      */
     // protected function configureSchedules(Schedule $schedule): void
     // {

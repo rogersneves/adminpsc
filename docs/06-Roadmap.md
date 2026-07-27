@@ -373,10 +373,50 @@ instalado (sem dados), configuração de ambiente (MySQL, fila database).
   é append-only e cifrado — a exclusão/anonimização do conteúdo clínico exige processo dedicado, alinhado
   ao mesmo deferral de recifragem da Fase 9).
 
-## Fase 11 — Produtização SaaS
-- Onboarding de novo tenant, planos/billing, personalização por tenant (tema, configurações),
-  eventual caminho de isolamento físico de dados para tenants grandes (reavaliação do ADR-003 de
-  `01-Arquitetura.md`).
+## Fase 11 — Produtização SaaS (concluída)
+- Primeira fase a dar vida ao módulo `Settings` (skeleton desde a Fase 0) — é onde a configuração
+  por-tenant e a camada de produtização passam a morar.
+- **Planos e limites** (catálogo em `config/plans.php`, não tabela — é catálogo da plataforma, não dado
+  de tenant): `trial`/`basico`/`profissional`, cada um com `max_psychologists`/`max_patients` (`null` =
+  ilimitado). `Modules\Settings\Services\PlanLimits` aplica o limite; `RegisterPsychologistAction` chama
+  `assertCanAddPsychologist` antes de criar qualquer linha, e o Controller converte a
+  `PlanLimitReachedException` numa mensagem de validação. **Cobrança real de gateway/PIX continua marco
+  futuro** — "billing" aqui é estado de assinatura + trial + aplicação de limite, sem pagamento.
+- **Provisionamento/onboarding** (`ProvisionTenantAction`): fonte única de "como nasce um tenant" (plano
+  default, janela de trial `config('plans.trial_days')`, slug único). `RegisterClinicAdminAction`
+  (auto-cadastro do Admin da Clínica) foi refatorada para usá-la, então o cadastro e a criação manual por
+  Super Admin caem no mesmo estado inicial. Coluna nova `tenants.trial_ends_at` (as demais —
+  `plan`/`status`/`settings` — já existiam da Fase 1).
+- **Configuração por-tenant** (`Modules\Settings\Services\TenantSettings`): lê de `tenants.settings` (JSON)
+  com **fallback para o `config/*` global** — um tenant que não mexeu numa chave herda o default, sem
+  duplicar valor no banco. Registro de chaves conhecidas (agenda: horizonte de reserva, antecedência
+  mínima; marca: nome de exibição, cor primária). Tela `/configuracoes` (`manage-clinic-settings`,
+  primeira permissão real desse escopo, seedada desde a Fase 1). **Fecha as pendências antigas de "timeout
+  de sessão / antecedência mínima configurável por tenant"** (Fases 1/3): os consumidores do Scheduling
+  (`AgendaController`, `EnsuresMinimumNotice`) agora leem via `TenantSettings->current(...)`.
+- **Gestão de tenants pela plataforma** (`/plataforma/tenants`, `PlatformTenantController`): **primeira
+  rota a usar `platform.manage-tenants`** (seedada desde a Fase 1, sem uso até aqui). Super Admin lista,
+  provisiona e altera plano/status de qualquer tenant. Sem `resolve.tenant` — o Super Admin opera
+  cross-tenant e não tem tenant próprio.
+- **Marca por-tenant** exposta como prop compartilhada do Inertia (`branding` em `HandleInertiaRequests`,
+  lazy) para as telas usarem nome/cor da clínica.
+- **Isolamento físico (ADR-003)**: reavaliado e registrado como **ADR-007** em `01-Arquitetura.md` — a
+  decisão de manter isolamento por coluna é confirmada para esta fase; o caminho de migração para
+  schema/database-per-tenant fica documentado como gatilho por-cliente, não implementado.
+- 202 testes PHPUnit no total (184 das Fases 1-10 + 18 novos), suíte completa verde; verificado
+  manualmente contra MySQL real: override de `booking_horizon_days` por tenant vencendo o config,
+  bloqueio de criação de psicólogo além do limite do plano trial, e provisionamento com trial via
+  `ProvisionTenantAction`.
+- **Pendências explícitas desta fase, não bloqueantes:** integração de gateway de pagamento/PIX e cobrança
+  recorrente de verdade (marco futuro); enforcement do `max_patients` no auto-cadastro de paciente (hoje o
+  limite existe e é exibido, mas só psicólogos são bloqueados na criação); bloqueio de acesso quando o
+  trial expira ou o tenant é `suspended` (hoje o status é gravado e exibido, mas não há middleware que
+  barre o login/uso — decisão de produto para quando houver billing real); aplicação da cor/marca do
+  tenant no tema visual além de expor a prop (as páginas ainda não consomem `branding` no layout);
+  configuração por-tenant do timeout de sessão (o `EnsureSessionIsValid` roda no grupo `web` antes de
+  `resolve.tenant`, então o override por-tenant do timeout exige resolver o tenant mais cedo — os demais
+  parâmetros de agenda já são por-tenant); isolamento físico de dados (ADR-007, documentado, não
+  implementado); telas de billing/faturas e histórico de mudança de plano.
 
 ## Marcos futuros (fora de fases numeradas, mantidos como visão)
 - Múltiplos psicólogos por clínica, múltiplas unidades, secretárias com escopo próprio.

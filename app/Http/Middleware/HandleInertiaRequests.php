@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use Modules\Settings\Services\TenantSettings;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -54,6 +55,27 @@ class HandleInertiaRequests extends Middleware
             // se essa shared prop usasse a mesma chave, a prop da página venceria o
             // merge do Inertia e "unreadCount" sumiria silenciosamente nessa página.
             'unreadNotificationsCount' => fn () => $request->user()?->unreadNotifications()->count() ?? 0,
+            // Marca por tenant (Fase 11) — lazy: só resolve quando a página usa.
+            'branding' => fn () => $this->branding($request),
+        ];
+    }
+
+    /**
+     * @return array{display_name: string, primary_color: string}|null
+     */
+    private function branding(Request $request): ?array
+    {
+        $tenant = $request->user()?->tenant;
+
+        if ($tenant === null) {
+            return null;
+        }
+
+        $settings = app(TenantSettings::class);
+
+        return [
+            'display_name' => (string) $settings->get($tenant, 'branding.display_name'),
+            'primary_color' => (string) $settings->get($tenant, 'branding.primary_color'),
         ];
     }
 }

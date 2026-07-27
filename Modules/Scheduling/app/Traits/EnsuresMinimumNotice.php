@@ -6,6 +6,7 @@ namespace Modules\Scheduling\Traits;
 
 use Modules\Scheduling\Exceptions\InsufficientNoticeException;
 use Modules\Scheduling\Models\Session;
+use Modules\Settings\Services\TenantSettings;
 
 /**
  * Compartilhado por Cancel/RescheduleSessionAction — mesma regra, mesma mensagem.
@@ -24,10 +25,13 @@ trait EnsuresMinimumNotice
 
         $hoursNotice = now()->diffInHours($session->scheduled_at, absolute: true);
 
-        if ($hoursNotice < (int) config('scheduling.minimum_reschedule_notice_hours')) {
+        // Configurável por tenant (Fase 11), com fallback para config/scheduling.php.
+        $minimumNotice = (int) app(TenantSettings::class)->current('scheduling.minimum_reschedule_notice_hours');
+
+        if ($hoursNotice < $minimumNotice) {
             throw new InsufficientNoticeException(
                 'Cancelamentos e reagendamentos precisam ser feitos com pelo menos '
-                .config('scheduling.minimum_reschedule_notice_hours').'h de antecedência.'
+                .$minimumNotice.'h de antecedência.'
             );
         }
     }

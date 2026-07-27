@@ -16,6 +16,7 @@ use Modules\Scheduling\Enums\SessionModality;
 use Modules\Scheduling\Exceptions\SlotNoLongerAvailableException;
 use Modules\Scheduling\Http\Requests\BookSessionRequest;
 use Modules\Scheduling\Services\AvailabilityCalculator;
+use Modules\Settings\Services\TenantSettings;
 use Modules\Tenant\Support\CurrentTenant;
 
 class AgendaController extends Controller
@@ -34,12 +35,13 @@ class AgendaController extends Controller
         return Inertia::render('Scheduling/ChoosePsychologist', ['psychologists' => $psychologists]);
     }
 
-    public function show(Psychologist $psychologist, AvailabilityCalculator $calculator, CurrentTenant $currentTenant): Response
+    public function show(Psychologist $psychologist, AvailabilityCalculator $calculator, CurrentTenant $currentTenant, TenantSettings $settings): Response
     {
         $currentTenant->ownsOrFail($psychologist);
 
         $from = CarbonImmutable::now();
-        $to = $from->addDays((int) config('scheduling.booking_horizon_days'));
+        // Horizonte de reserva configurável por tenant (Fase 11).
+        $to = $from->addDays((int) $settings->current('scheduling.booking_horizon_days'));
 
         $slotsByDate = $calculator->availableSlots($psychologist, $from, $to);
 

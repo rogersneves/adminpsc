@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Modules\Psychologists\DTOs\RegisterPsychologistData;
 use Modules\Psychologists\Models\Psychologist;
+use Modules\Settings\Services\PlanLimits;
 use Modules\Users\Models\User;
 
 /**
@@ -20,8 +21,13 @@ use Modules\Users\Models\User;
  */
 class RegisterPsychologistAction
 {
+    public function __construct(private readonly PlanLimits $planLimits) {}
+
     public function __invoke(User $actor, RegisterPsychologistData $data): User
     {
+        // Limite do plano do tenant (Fase 11): bloqueia antes de criar qualquer linha.
+        $this->planLimits->assertCanAddPsychologist($actor->tenant);
+
         $user = DB::transaction(function () use ($actor, $data) {
             $user = User::query()->create([
                 'tenant_id' => $actor->tenant_id,

@@ -7,11 +7,13 @@ namespace Modules\Psychologists\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Modules\Psychologists\Actions\RegisterPsychologistAction;
 use Modules\Psychologists\Http\Requests\RegisterPsychologistRequest;
 use Modules\Psychologists\Models\Psychologist;
+use Modules\Settings\Exceptions\PlanLimitReachedException;
 
 class PsychologistController extends Controller
 {
@@ -43,7 +45,11 @@ class PsychologistController extends Controller
 
     public function store(RegisterPsychologistRequest $request, RegisterPsychologistAction $action): RedirectResponse
     {
-        $action($request->user(), $request->toDto());
+        try {
+            $action($request->user(), $request->toDto());
+        } catch (PlanLimitReachedException $e) {
+            throw ValidationException::withMessages(['plan' => $e->getMessage()]);
+        }
 
         return redirect()->route('psychologists.index')->with('status', 'Psicólogo cadastrado. Um link para definir a senha foi enviado por e-mail.');
     }

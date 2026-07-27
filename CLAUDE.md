@@ -122,8 +122,10 @@ RolesAndPermissionsSeeder` (called from `DatabaseSeeder`). 7 roles: `super_admin
 `super_admin` gets all (`manage-users`, `manage-clinic-settings`, `view-audit-log`,
 `platform.manage-tenants`, `manage-financial`, `manage-cms`, `manage-legal`); `admin_clinica` gets all
 but `platform.manage-tenants`; `financeiro` gets `manage-financial` (Fase 5). `manage-cms` (Fase 8) and
-`manage-legal` (Fase 10, LGPD documents) are on `super_admin`/`admin_clinica`. The remaining roles earn
-permissions as their modules ship.
+`manage-legal` (Fase 10, LGPD documents) are on `super_admin`/`admin_clinica`. **Fase 11 finally exercises
+two long-seeded-but-unused permissions:** `manage-clinic-settings` gates `/configuracoes` (per-tenant
+settings) and `platform.manage-tenants` gates `/plataforma/tenants` (Super-Admin cross-tenant management).
+The remaining roles earn permissions as their modules ship.
 
 **Authentication flow (Fase 1, done):** registration (`POST /register`) creates a `Tenant` + `User`
 (role `admin_clinica`) and logs the user in immediately without MFA (see the ADR-style comment in
@@ -359,6 +361,34 @@ added to `patients` by a Security-module migration, Fase-7 precedent), soft-dele
 guardians + the login account, keeping the row for retention duties; audited `lgpd.patient_anonymized`,
 idempotent. Note `medical_record_content` is deliberately left out of anonymization (append-only +
 encrypted — same class of deferral as the Fase 9 rotation).
+
+**SaaS productization (Fase 11, done):** the phase that finally gives the `Settings` module a body. (1)
+**Plans** are a config catalogue (`config/plans.php`, not a table — plans are platform catalogue, not
+tenant data): `trial`/`basico`/`profissional`, each with `max_psychologists`/`max_patients` (`null` =
+unlimited). `Modules\Settings\Services\PlanLimits` enforces them; `RegisterPsychologistAction` calls
+`assertCanAddPsychologist` before creating anything and `PsychologistController` converts the
+`PlanLimitReachedException` into a validation error on `plan`. **Real payment/PIX billing stays a future
+milestone** — "billing" here is subscription state + trial + limit enforcement, no gateway. (2)
+**Provisioning** — `ProvisionTenantAction` is the single "how a tenant is born" (default plan, trial
+window from `config('plans.trial_days')`, unique slug); `RegisterClinicAdminAction` was refactored to use
+it so self-signup and Super-Admin creation land identically. New column `tenants.trial_ends_at`
+(`plan`/`status`/`settings` already existed since Fase 1). (3) **Per-tenant config** —
+`Modules\Settings\Services\TenantSettings` reads from `tenants.settings` (JSON) **with fallback to global
+`config/*`**: a tenant that never touched a key inherits the default, nothing duplicated in the DB. A
+registry of known keys (scheduling booking horizon + minimum reschedule notice; branding display name +
+primary colour), edited at `/configuracoes` (`manage-clinic-settings`). **This closes the old "session
+timeout / minimum notice configurable per tenant" deferrals** (Fases 1/3): scheduling consumers
+(`AgendaController`, `EnsuresMinimumNotice`) now read `TenantSettings->current(...)`. **Settings are sent
+and validated nested** (`scheduling[booking_horizon_days]`) so Laravel's `'scheduling.x'` dot-rules work,
+then flattened with `Arr::dot()` before `TenantSettings::set()` (whose registry is keyed by dot-strings) —
+don't send flat literal-dotted field names, they won't validate as nested. (4) **Platform tenant
+management** — `/plataforma/tenants` (`PlatformTenantController`) is the **first route to use
+`platform.manage-tenants`** (seeded since Fase 1, unused until now): Super Admin lists/provisions/changes
+plan+status of any tenant, **without `resolve.tenant`** (Super Admin is cross-tenant and has no tenant of
+their own; `Tenant` isn't `BelongsToTenant` so binding works unscoped). Per-tenant **branding** is a lazy
+Inertia shared prop (`branding` in `HandleInertiaRequests`). ADR-003 (column isolation) was re-evaluated
+and **kept** — documented as ADR-007 in `docs/01`; physical isolation stays a per-client future trigger,
+not the default topology.
 
 **Frontend:** Inertia pages live in `resources/js/Pages` (root) or `Modules/{Name}/resources/js/Pages`
 (per module). shadcn/ui components are copied into `resources/js/components/ui` (lowercase, per the
@@ -673,9 +703,37 @@ back to v2. Flagged here in case there was a specific reason v2 was required.
   no existing test seeds a `legal_documents` row. If you ever make consent mandatory-by-default, expect
   to touch a lot of tests.
 
+## Gotchas hit during Fase 11
+
+- **Dot-notation validation rules expect NESTED input, not a literal dotted field name.** The settings
+  form validates `'scheduling.booking_horizon_days' => [...]`, which Laravel reads as
+  `scheduling[booking_horizon_days]` (nested). So the Inertia form must send nested data
+  (`{ scheduling: { booking_horizon_days } }`), and `$request->validate` returns it nested too. But
+  `TenantSettings`'s registry is keyed by dot-strings, so the controller flattens the validated array with
+  `Arr::dot()` before `set()`. Sending flat literal-dotted field names instead would silently fail
+  validation (Laravel looks for a nested `scheduling` key that isn't there). Keep the two representations
+  straight: nested over the wire + for validation, dot-flat for the settings store.
+- **`TenantSettings` deliberately does not persist a value that equals the config default — it stores only
+  what the tenant actually changed, and everything else falls through to `config/*`.** `get()` returns the
+  stored value if present else the config fallback; `set()` writes the given keys into the JSON. This
+  keeps the `tenants.settings` blob small and means changing a global default in `config/scheduling.php`
+  still moves every tenant that never overrode it. Don't "hydrate" all defaults into the JSON on tenant
+  creation — that would freeze each tenant on the creation-time defaults and defeat the fallback.
+- **Refactoring `RegisterClinicAdminAction` to depend on `ProvisionTenantAction` crosses a module
+  boundary (Authentication → Settings) — that's the intended direction.** Settings owns "how a tenant is
+  born" now, and both the self-signup (Authentication) and the Super-Admin console (Settings) call the
+  same Action, so they can't drift. If you add another tenant-creation entry point, route it through
+  `ProvisionTenantAction` too rather than re-inlining `Tenant::create`.
+- **Plan-limit enforcement lives in the Action, not the FormRequest.** `RegisterPsychologistAction` throws
+  `PlanLimitReachedException` (a domain exception, before any row is written) and the controller catches
+  it into a `ValidationException` on the `plan` key. A FormRequest rule couldn't express "count existing
+  psychologists vs the tenant's plan limit" cleanly, and putting it in the Action keeps the rule reusable
+  from a future API/CLI path. The count uses `withoutTenantScope()` + explicit `where('tenant_id')`
+  because the Action may run with or without a resolved `CurrentTenant`.
+
 ## What exists vs. what doesn't yet
 
-**Done (Fase 0 through Fase 10):** Laravel + Inertia + React + Tailwind + shadcn/ui wiring; the 18 module
+**Done (Fase 0 through Fase 11):** Laravel + Inertia + React + Tailwind + shadcn/ui wiring; the 18 module
 skeletons; `Tenant` model/scope/middleware; full registration → email verification → login → MFA
 (email OTP + TOTP) → session-timeout-guarded dashboard flow (`Modules\Authentication`); envelope
 encryption primitives (`EnvelopeEncrypted`, `EncryptedJson`, `searchHash`, all in `Modules\Security`);
@@ -696,16 +754,18 @@ rendering at `/c/{tenant:slug}` (`Modules\CMS`); security-headers middleware, en
 rotation (`security:rotate-key` + `RotateEncryptionKeyJob`), domain-event audit coverage, and
 export/receipt rate limiting (`Modules\Security`/`Modules\Audit`, Fase 9); versioned per-tenant legal
 documents, append-only consent with global re-consent gating, Art. 18 self-service data
-access/portability, and irreversible patient anonymization (`Modules\Security` `Lgpd` namespace, Fase 10).
-184 PHPUnit tests, plus ten
+access/portability, and irreversible patient anonymization (`Modules\Security` `Lgpd` namespace, Fase 10);
+config-defined plans with limit enforcement, tenant provisioning with trial, per-tenant settings over a
+config-fallback layer, Super-Admin cross-tenant management, and per-tenant branding (`Modules\Settings`,
+Fase 11). 202 PHPUnit tests, plus eleven
 manual end-to-end passes against real MySQL (one per phase — most caught a real bug or a real gotcha
 PHPUnit missed, see the gotchas sections above — keep doing the manual pass every phase regardless of
 whether a given phase turns up nothing new).
 
-**Not built yet:** SaaS productization (Fase 11) and the `Settings` module (no
-dedicated phase number — built when a phase that needs per-tenant config reaches it) remain in
-`docs/06-Roadmap.md`; re-evaluate architectural/security/LGPD impact before
-starting each one. Also not built: admin-facing patient
+**All eleven numbered phases (Fase 0–11) of `docs/06-Roadmap.md` are complete.** What remains is the
+roadmap's "Marcos futuros" (unnumbered vision: real payment gateways/PIX, teleconsulta, e-signature,
+NFe, mobile app, public REST API, SMS/WhatsApp channels) plus the per-phase deferrals below. Not built:
+admin-facing patient
 list/management UI, psychologist profile editing, Secretária/Financeiro staff invites, guardian portal
 access (Fase 2 deferrals); automatic waiting-list notification when a slot opens (the module exists now,
 but nothing wires `waiting_list_entries` to it yet), editing/removing an existing availability rule beyond
@@ -738,7 +798,16 @@ process), wiring LGPD consent into the CMS Formulário/Contato blocks for lawful
 retention-driven anonymization (one patient at a time today), a public-facing view of the current legal
 documents on the CMS site, PDF (not just JSON) "my data" export, and anonymization/erasure of
 `medical_record_content` (append-only + encrypted — needs a dedicated process, same class as the Fase 9
-rotation deferral) (Fase 10 deferrals).
+rotation deferral) (Fase 10 deferrals); real payment gateway/PIX + recurring billing (future milestone),
+`max_patients` enforcement on patient self-signup (the limit is defined and displayed but only
+psychologist creation is actually blocked), blocking access when a trial expires or a tenant is
+`suspended` (status is stored/shown but no middleware bars login/use yet — a product decision for when
+real billing exists), applying the tenant's branding colour to the visual theme (the `branding` prop is
+exposed but pages don't consume it in a layout yet), per-tenant **session-timeout** config
+(`EnsureSessionIsValid` runs in the `web` group before `resolve.tenant`, so a per-tenant timeout override
+needs the tenant resolved earlier — the scheduling knobs are already per-tenant), physical data isolation
+(ADR-007, documented not implemented), and billing/invoice screens + plan-change history (Fase 11
+deferrals).
 
 Also not yet in place: `lang/` translation files and the React `t()`/`useTranslation` hook described in
 `docs/05-UIUX-Design-System.md` (pages currently hardcode Portuguese text as a placeholder — don't copy

@@ -6,7 +6,6 @@ namespace Modules\Scheduling\Services;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
-use Modules\Psychologists\Enums\AvailabilityType;
 use Modules\Psychologists\Models\Psychologist;
 use Modules\Psychologists\Models\PsychologistAvailability;
 use Modules\Scheduling\Models\Session;
@@ -28,7 +27,7 @@ class AvailabilityCalculator
 {
     /**
      * @return array<string, array<int, array{starts_at: CarbonImmutable, ends_at: CarbonImmutable}>>
-     *         chaveado por data (Y-m-d), cada uma com a lista de slots daquele dia.
+     *                                                                                                chaveado por data (Y-m-d), cada uma com a lista de slots daquele dia.
      */
     public function availableSlots(Psychologist $psychologist, CarbonImmutable $from, CarbonImmutable $to): array
     {

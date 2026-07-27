@@ -1,8 +1,6 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use Modules\Settings\Http\Controllers\SettingsController;
+declare(strict_types=1);
 
-Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
-    Route::apiResource('settings', SettingsController::class)->names('settings');
-});
+// Sem rotas de API no Settings por ora — a gestão é via Inertia (routes/web.php).
+// API REST pública é marco futuro (docs/06-Roadmap.md).

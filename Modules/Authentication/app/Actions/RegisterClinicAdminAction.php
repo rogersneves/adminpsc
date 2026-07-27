@@ -7,9 +7,8 @@ namespace Modules\Authentication\Actions;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Modules\Authentication\DTOs\RegisterClinicAdminData;
-use Modules\Tenant\Models\Tenant;
+use Modules\Settings\Actions\ProvisionTenantAction;
 use Modules\Users\Models\User;
 
 /**
@@ -27,15 +26,12 @@ use Modules\Users\Models\User;
  */
 class RegisterClinicAdminAction
 {
+    public function __construct(private readonly ProvisionTenantAction $provisionTenant) {}
+
     public function __invoke(RegisterClinicAdminData $data): User
     {
         $user = DB::transaction(function () use ($data) {
-            $tenant = Tenant::query()->create([
-                'name' => $data->tenantName,
-                'slug' => $this->uniqueSlug($data->tenantName),
-                'plan' => 'trial',
-                'status' => 'active',
-            ]);
+            $tenant = ($this->provisionTenant)($data->tenantName);
 
             $user = User::query()->create([
                 'tenant_id' => $tenant->id,
@@ -55,19 +51,5 @@ class RegisterClinicAdminAction
         session(['auth.login_at' => now(), 'auth.last_activity' => now()]);
 
         return $user;
-    }
-
-    private function uniqueSlug(string $name): string
-    {
-        $base = Str::slug($name);
-        $slug = $base;
-        $suffix = 1;
-
-        while (Tenant::query()->where('slug', $slug)->exists()) {
-            $slug = "{$base}-{$suffix}";
-            $suffix++;
-        }
-
-        return $slug;
     }
 }

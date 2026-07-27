@@ -171,3 +171,17 @@ ainda (isso continua na Fase 9).
 **Consequência:** o mesmo cast já fica pronto para cifrar PII de pacientes/responsáveis na Fase 2, sem
 retrabalho — só reaproveitar `EnvelopeEncrypted::class.':contexto'` no `casts()` do Model. Rotação de
 chave, múltiplas DEKs por tenant e o Job de recriptografia em background continuam pendências da Fase 9.
+
+### ADR-007 — Isolamento por coluna mantido na produtização SaaS (reavaliação do ADR-003)
+**Contexto:** a Fase 11 (produtização SaaS) exige reavaliar explicitamente o ADR-003 (isolamento
+multi-tenant por coluna `tenant_id`, não por schema/database), agora que o produto ganha planos, trial e
+gestão de tenants pela plataforma.
+**Decisão:** manter o isolamento por coluna. Nada na Fase 11 muda a premissa do ADR-003 — o deploy segue
+Plesk sem orquestração de múltiplos bancos, e o isolamento por coluna + Global Scope + falha segura
+continua entregando a segurança necessária com operação simples. A camada de produtização (catálogo de
+planos em `config/plans.php`, `tenants.trial_ends_at`, `TenantSettings` sobre `tenants.settings`,
+`PlanLimits`) foi construída **por cima** do modelo por coluna, sem exigir mudança de topologia.
+**Consequência:** um cliente grande que exija isolamento físico continua sendo um gatilho por-cliente,
+não a topologia padrão. O caminho de migração para schema-per-tenant/database-per-tenant permanece
+documentado como evolução futura (a coluna `tenant_id` presente em todo lugar já é o ponto de corte
+natural), a ser registrado como novo ADR se e quando um contrato exigir — não implementado nesta fase.

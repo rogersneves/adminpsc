@@ -2,9 +2,9 @@
 
 namespace Modules\Tenant\Providers;
 
-use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
 use Modules\Tenant\Support\CurrentTenant;
+use Nwidart\Modules\Support\ModuleServiceProvider;
 
 class TenantServiceProvider extends ModuleServiceProvider
 {
@@ -44,8 +44,8 @@ class TenantServiceProvider extends ModuleServiceProvider
 
     /**
      * Define module schedules.
-     * 
-     * @param $schedule
+     *
+     * @param  $schedule
      */
     // protected function configureSchedules(Schedule $schedule): void
     // {

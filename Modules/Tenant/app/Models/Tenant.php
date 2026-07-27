@@ -24,6 +24,7 @@ class Tenant extends Model
         'slug',
         'plan',
         'status',
+        'trial_ends_at',
         'settings',
     ];
 
@@ -31,6 +32,28 @@ class Tenant extends Model
     {
         return [
             'settings' => 'array',
+            'trial_ends_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Configuração do plano atual (config/plans.php), com fallback para o plano
+     * default se o identificador guardado não existir mais no catálogo.
+     */
+    public function planConfig(): array
+    {
+        $plans = config('plans.plans');
+
+        return $plans[$this->plan] ?? $plans[config('plans.default')];
+    }
+
+    public function onTrial(): bool
+    {
+        return $this->trial_ends_at !== null && $this->trial_ends_at->isFuture();
+    }
+
+    public function trialExpired(): bool
+    {
+        return $this->trial_ends_at !== null && $this->trial_ends_at->isPast();
     }
 }

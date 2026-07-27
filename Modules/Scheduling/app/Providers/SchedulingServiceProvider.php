@@ -2,13 +2,13 @@
 
 namespace Modules\Scheduling\Providers;
 
-use Illuminate\Support\Facades\Gate;
-use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Gate;
 use Modules\Scheduling\Models\Session;
 use Modules\Scheduling\Models\WaitingListEntry;
 use Modules\Scheduling\Policies\SessionPolicy;
 use Modules\Scheduling\Policies\WaitingListEntryPolicy;
+use Nwidart\Modules\Support\ModuleServiceProvider;
 
 class SchedulingServiceProvider extends ModuleServiceProvider
 {
@@ -50,7 +50,7 @@ class SchedulingServiceProvider extends ModuleServiceProvider
     /**
      * Define module schedules.
      *
-     * @param $schedule
+     * @param  $schedule
      */
     // protected function configureSchedules(Schedule $schedule): void
     // {
