@@ -83,8 +83,8 @@ export default function Editor({ page }) {
     };
 
     return (
-        <div className="flex h-screen flex-col bg-neutral-100">
-            <header className="flex flex-wrap items-center gap-3 border-b bg-white px-4 py-3">
+        <div className="flex h-screen flex-col bg-muted">
+            <header className="flex flex-wrap items-center gap-3 border-b bg-card px-4 py-3">
                 <Link href="/cms/paginas" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
                     ← Voltar
                 </Link>
@@ -111,7 +111,7 @@ export default function Editor({ page }) {
                     <option value="rascunho">Rascunho</option>
                     <option value="publicada">Publicada</option>
                 </select>
-                <label className="flex items-center gap-1.5 text-sm text-neutral-700">
+                <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
                     <input
                         type="checkbox"
                         checked={meta.is_home}
@@ -131,13 +131,13 @@ export default function Editor({ page }) {
             </header>
 
             {Object.keys(errors).length > 0 && (
-                <div className="border-b bg-red-50 px-4 py-2 text-sm text-red-700" role="alert">
+                <div className="border-b bg-destructive/10 px-4 py-2 text-sm text-destructive" role="alert">
                     {Object.values(errors).join(' ')}
                 </div>
             )}
 
-            <details className="border-b bg-white px-4 py-2 text-sm">
-                <summary className="cursor-pointer text-neutral-600">SEO (meta título e descrição)</summary>
+            <details className="border-b bg-card px-4 py-2 text-sm">
+                <summary className="cursor-pointer text-muted-foreground">SEO (meta título e descrição)</summary>
                 <div className="mt-2 flex flex-wrap gap-3">
                     <input
                         type="text"

@@ -1,6 +1,7 @@
 import { useForm, usePage } from '@inertiajs/react';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import AppLayout from '@/Layouts/AppLayout';
 
 function Usage({ used, max }) {
     return (
@@ -33,25 +34,18 @@ export default function Index({ settings, plan }) {
     const set = (group, key, value) => setData(group, { ...data[group], [key]: value });
 
     return (
-        <div className="min-h-screen bg-neutral-50 p-6">
+        <AppLayout title="Configurações">
             <div className="mx-auto flex max-w-2xl flex-col gap-4">
-                {props.flash?.status && (
-                    <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700" role="status">
-                        {props.flash.status}
-                    </p>
-                )}
-
-                <h1 className="text-xl font-semibold">Configurações</h1>
 
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-base">Plano {plan.label}</CardTitle>
                     </CardHeader>
-                    <CardContent className="text-sm text-neutral-700">
+                    <CardContent className="text-sm text-muted-foreground">
                         <p>Psicólogos: <Usage used={plan.psychologists_used} max={plan.max_psychologists} /></p>
                         <p>Pacientes: <Usage used={plan.patients_used} max={plan.max_patients} /></p>
                         {plan.on_trial && (
-                            <p className="mt-1 text-amber-700">
+                            <p className="mt-1 text-warning">
                                 Período de avaliação até {new Date(plan.trial_ends_at).toLocaleDateString('pt-BR')}.
                             </p>
                         )}
@@ -73,7 +67,7 @@ export default function Index({ settings, plan }) {
                                     className="mt-1 w-full rounded-md border px-3 py-2"
                                 />
                                 {errors['scheduling.booking_horizon_days'] && (
-                                    <span className="text-red-600">{errors['scheduling.booking_horizon_days']}</span>
+                                    <span className="text-destructive">{errors['scheduling.booking_horizon_days']}</span>
                                 )}
                             </label>
                             <label className="font-medium">
@@ -85,7 +79,7 @@ export default function Index({ settings, plan }) {
                                     className="mt-1 w-full rounded-md border px-3 py-2"
                                 />
                                 {errors['scheduling.minimum_reschedule_notice_hours'] && (
-                                    <span className="text-red-600">{errors['scheduling.minimum_reschedule_notice_hours']}</span>
+                                    <span className="text-destructive">{errors['scheduling.minimum_reschedule_notice_hours']}</span>
                                 )}
                             </label>
                         </CardContent>
@@ -105,7 +99,7 @@ export default function Index({ settings, plan }) {
                                     className="mt-1 w-full rounded-md border px-3 py-2"
                                 />
                                 {errors['branding.display_name'] && (
-                                    <span className="text-red-600">{errors['branding.display_name']}</span>
+                                    <span className="text-destructive">{errors['branding.display_name']}</span>
                                 )}
                             </label>
                             <label className="font-medium">
@@ -117,7 +111,7 @@ export default function Index({ settings, plan }) {
                                     className="mt-1 block h-10 w-20 rounded-md border"
                                 />
                                 {errors['branding.primary_color'] && (
-                                    <span className="text-red-600">{errors['branding.primary_color']}</span>
+                                    <span className="text-destructive">{errors['branding.primary_color']}</span>
                                 )}
                             </label>
                         </CardContent>
@@ -128,6 +122,6 @@ export default function Index({ settings, plan }) {
                     </button>
                 </form>
             </div>
-        </div>
+        </AppLayout>
     );
 }

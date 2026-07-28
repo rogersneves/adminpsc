@@ -44,6 +44,8 @@ class HandleInertiaRequests extends Middleware
                         'id' => $request->user()->id,
                         'name' => $request->user()->name,
                         'email' => $request->user()->email,
+                        'roles' => $request->user()->getRoleNames()->all(),
+                        'can' => $this->abilities($request->user()),
                     ]
                     : null,
             ],
@@ -58,6 +60,27 @@ class HandleInertiaRequests extends Middleware
             // Marca por tenant (Fase 11) — lazy: só resolve quando a página usa.
             'branding' => fn () => $this->branding($request),
         ];
+    }
+
+    /**
+     * Permissões usadas pela navegação do frontend (sidebar role-aware). Espelham as
+     * checagens `can:` das rotas — a UI só esconde o que o backend já protege.
+     *
+     * @return array<string, bool>
+     */
+    private function abilities($user): array
+    {
+        $permissions = [
+            'manage-users', 'manage-financial', 'manage-cms', 'manage-legal',
+            'manage-clinic-settings', 'view-audit-log', 'platform.manage-tenants',
+        ];
+
+        $can = [];
+        foreach ($permissions as $permission) {
+            $can[$permission] = $user->can($permission);
+        }
+
+        return $can;
     }
 
     /**

@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import InputError from '@/Components/InputError';
+import AppLayout from '@/Layouts/AppLayout';
 
 const MODALITY_LABELS = { presencial: 'Presencial', online: 'Online', domiciliar: 'Domiciliar' };
 
@@ -51,16 +52,8 @@ export default function Book({ psychologist, slotsByDate, modalities }) {
     const dates = Object.keys(slotsByDate);
 
     return (
-        <div className="min-h-screen bg-neutral-50 p-6">
+        <AppLayout title={`Agendar com ${psychologist.name}`}>
             <div className="mx-auto flex max-w-2xl flex-col gap-4">
-                {props.flash?.status && (
-                    <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700" role="status">
-                        {props.flash.status}
-                    </p>
-                )}
-
-                <h1 className="text-xl font-semibold">Agendar com {psychologist.name}</h1>
-
                 {dates.length === 0 && (
                     <Card>
                         <CardContent className="pt-4 text-sm text-muted-foreground">
@@ -81,7 +74,7 @@ export default function Book({ psychologist, slotsByDate, modalities }) {
                                     className={`rounded-lg border px-3 py-1.5 text-sm ${
                                         selectedSlot?.starts_at === slot.starts_at
                                             ? 'border-primary bg-primary text-primary-foreground'
-                                            : 'border-border bg-white'
+                                            : 'border-border bg-card'
                                     }`}
                                 >
                                     {formatTime(slot.starts_at)}
@@ -152,6 +145,6 @@ export default function Book({ psychologist, slotsByDate, modalities }) {
                     </CardContent>
                 </Card>
             </div>
-        </div>
+        </AppLayout>
     );
 }

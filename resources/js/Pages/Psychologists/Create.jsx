@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import InputError from '@/Components/InputError';
+import AppLayout from '@/Layouts/AppLayout';
 
 export default function Create() {
     const [specialtyInput, setSpecialtyInput] = useState('');
@@ -33,7 +34,7 @@ export default function Create() {
     }
 
     return (
-        <div className="min-h-screen bg-neutral-50 p-6">
+        <AppLayout title="Cadastrar psicólogo">
             <div className="mx-auto max-w-lg">
                 <Card>
                     <CardHeader>
@@ -98,6 +99,6 @@ export default function Create() {
                     </CardContent>
                 </Card>
             </div>
-        </div>
+        </AppLayout>
     );
 }

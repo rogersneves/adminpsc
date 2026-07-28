@@ -1,6 +1,7 @@
 import { Link, router } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import AppLayout from '@/Layouts/AppLayout';
 
 function formatDateTime(iso) {
     return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
@@ -18,7 +19,7 @@ export default function Index({ notifications }) {
     const hasUnread = notifications.data.some((notification) => !notification.read_at);
 
     return (
-        <div className="min-h-screen bg-neutral-50 p-6">
+        <AppLayout title="Notificações">
             <div className="mx-auto flex max-w-2xl flex-col gap-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0">
@@ -36,7 +37,7 @@ export default function Index({ notifications }) {
                         {notifications.data.map((notification) => (
                             <div
                                 key={notification.id}
-                                className={`flex flex-col gap-1 rounded-md border p-3 ${notification.read_at ? 'bg-white' : 'bg-blue-50'}`}
+                                className={`flex flex-col gap-1 rounded-md border p-3 ${notification.read_at ? 'bg-card' : 'bg-info/10 border-info/30'}`}
                             >
                                 <div className="flex items-center justify-between gap-2">
                                     <span className="font-medium">{notification.title}</span>
@@ -87,6 +88,6 @@ export default function Index({ notifications }) {
                     Voltar ao painel
                 </Link>
             </div>
-        </div>
+        </AppLayout>
     );
 }

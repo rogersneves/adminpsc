@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import InputError from '@/Components/InputError';
+import AppLayout from '@/Layouts/AppLayout';
 
 const WEEKDAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 const TYPES = [
@@ -39,14 +40,8 @@ export default function Availability({ psychologist, availabilities }) {
     }
 
     return (
-        <div className="min-h-screen bg-neutral-50 p-6">
+        <AppLayout title="Disponibilidade">
             <div className="mx-auto flex max-w-2xl flex-col gap-4">
-                {props.flash?.status && (
-                    <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700" role="status">
-                        {props.flash.status}
-                    </p>
-                )}
-
                 <Card>
                     <CardHeader>
                         <CardTitle>Disponibilidade — {psychologist.name}</CardTitle>
@@ -133,7 +128,7 @@ export default function Availability({ psychologist, availabilities }) {
 
                 <div className="flex flex-col gap-2">
                     {availabilities.map((a) => (
-                        <div key={a.id} className="flex items-center justify-between rounded-lg bg-white p-3 text-sm ring-1 ring-foreground/10">
+                        <div key={a.id} className="flex items-center justify-between rounded-lg bg-card p-3 text-sm ring-1 ring-border">
                             <span>
                                 {TYPES.find((t) => t.value === a.type)?.label ?? a.type}
                                 {a.weekday !== null && ` — ${WEEKDAYS[a.weekday]}`}
@@ -145,6 +140,6 @@ export default function Availability({ psychologist, availabilities }) {
                     ))}
                 </div>
             </div>
-        </div>
+        </AppLayout>
     );
 }

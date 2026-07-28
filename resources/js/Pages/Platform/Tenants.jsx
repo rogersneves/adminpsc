@@ -1,6 +1,7 @@
 import { useForm, usePage, router } from '@inertiajs/react';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import AppLayout from '@/Layouts/AppLayout';
 
 function NewTenant({ plans }) {
     const { data, setData, post, processing, reset, errors } = useForm({ name: '', plan: plans[0]?.value });
@@ -25,7 +26,7 @@ function NewTenant({ plans }) {
                             onChange={(e) => setData('name', e.target.value)}
                             className="mt-1 rounded-md border px-3 py-2"
                         />
-                        {errors.name && <span className="text-red-600">{errors.name}</span>}
+                        {errors.name && <span className="text-destructive">{errors.name}</span>}
                     </label>
                     <label className="flex flex-col">
                         Plano
@@ -63,12 +64,12 @@ function TenantRow({ tenant, plans, statuses }) {
                     <span className="text-xs font-normal text-muted-foreground">/c/{tenant.slug}</span>
                 </CardTitle>
                 {tenant.on_trial && (
-                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                    <span className="rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
                         trial
                     </span>
                 )}
             </CardHeader>
-            <CardContent className="flex flex-wrap items-end gap-3 text-sm text-neutral-700">
+            <CardContent className="flex flex-wrap items-end gap-3 text-sm text-muted-foreground">
                 <span>Psicólogos: {tenant.psychologists}</span>
                 <span>Usuários: {tenant.users}</span>
                 <label className="flex flex-col">
@@ -111,22 +112,14 @@ export default function Tenants({ tenants, plans, statuses }) {
     const { props } = usePage();
 
     return (
-        <div className="min-h-screen bg-neutral-50 p-6">
+        <AppLayout title="Tenants da plataforma">
             <div className="mx-auto flex max-w-3xl flex-col gap-4">
-                {props.flash?.status && (
-                    <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700" role="status">
-                        {props.flash.status}
-                    </p>
-                )}
-
-                <h1 className="text-xl font-semibold">Tenants da plataforma</h1>
-
                 <NewTenant plans={plans} />
 
                 {tenants.map((tenant) => (
                     <TenantRow key={tenant.id} tenant={tenant} plans={plans} statuses={statuses} />
                 ))}
             </div>
-        </div>
+        </AppLayout>
     );
 }

@@ -11,7 +11,7 @@ export default function Consent({ documents }) {
     };
 
     return (
-        <div className="min-h-screen bg-neutral-50 p-6">
+        <div className="min-h-screen bg-muted/40 p-6">
             <div className="mx-auto flex max-w-2xl flex-col gap-4">
                 <div>
                     <h1 className="text-xl font-semibold">Antes de continuar</h1>
@@ -31,7 +31,7 @@ export default function Consent({ documents }) {
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-md border bg-white p-3 text-sm text-neutral-700">
+                            <div className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-md border bg-card p-3 text-sm text-muted-foreground">
                                 {doc.content}
                             </div>
                         </CardContent>
@@ -39,7 +39,7 @@ export default function Consent({ documents }) {
                 ))}
 
                 <form onSubmit={submit} className="flex flex-col gap-3">
-                    <label className="flex items-center gap-2 text-sm text-neutral-700">
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
                         <input
                             type="checkbox"
                             checked={data.accept}
@@ -47,7 +47,7 @@ export default function Consent({ documents }) {
                         />
                         Li e aceito os documentos acima.
                     </label>
-                    {errors.accept && <p className="text-sm text-red-600">{errors.accept}</p>}
+                    {errors.accept && <p className="text-sm text-destructive">{errors.accept}</p>}
 
                     <button type="submit" disabled={processing} className={buttonVariants() + ' self-start'}>
                         {processing ? 'Registrando…' : 'Aceitar e continuar'}

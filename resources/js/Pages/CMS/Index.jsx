@@ -1,12 +1,13 @@
 import { Link, router, usePage } from '@inertiajs/react';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import AppLayout from '@/Layouts/AppLayout';
 
 function StatusBadge({ status, label }) {
     const styles =
         status === 'publicada'
-            ? 'bg-emerald-50 text-emerald-700'
-            : 'bg-amber-50 text-amber-700';
+            ? 'bg-success/10 text-success'
+            : 'bg-warning/10 text-warning';
 
     return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${styles}`}>{label}</span>;
 }
@@ -24,25 +25,16 @@ export default function Index({ pages, tenantSlug }) {
     };
 
     return (
-        <div className="min-h-screen bg-neutral-50 p-6">
+        <AppLayout
+            title="Páginas do site"
+            actions={
+                <Link href="/cms/paginas/criar" className={buttonVariants({ size: 'sm' })}>
+                    Nova página
+                </Link>
+            }
+        >
             <div className="mx-auto flex max-w-2xl flex-col gap-4">
-                {props.flash?.status && (
-                    <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700" role="status">
-                        {props.flash.status}
-                    </p>
-                )}
-
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-xl font-semibold">Páginas do site</h1>
-                        <p className="text-sm text-muted-foreground">
-                            Páginas públicas da clínica, editadas visualmente.
-                        </p>
-                    </div>
-                    <Link href="/cms/paginas/criar" className={buttonVariants()}>
-                        Nova página
-                    </Link>
-                </div>
+                <p className="text-sm text-muted-foreground">Páginas públicas da clínica, editadas visualmente.</p>
 
                 {pages.length === 0 && (
                     <p className="text-sm text-muted-foreground">Nenhuma página criada ainda.</p>
@@ -54,7 +46,7 @@ export default function Index({ pages, tenantSlug }) {
                             <CardTitle className="flex items-center gap-2">
                                 {page.title}
                                 {page.is_home && (
-                                    <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
+                                    <span className="rounded-full bg-info/10 px-2 py-0.5 text-xs font-medium text-info">
                                         Página inicial
                                     </span>
                                 )}
@@ -92,6 +84,6 @@ export default function Index({ pages, tenantSlug }) {
                     </Card>
                 ))}
             </div>
-        </div>
+        </AppLayout>
     );
 }

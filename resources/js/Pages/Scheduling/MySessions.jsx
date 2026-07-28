@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import AppLayout from '@/Layouts/AppLayout';
 
 const STATUS_LABELS = {
     agendada: 'Agendada',
@@ -39,20 +40,13 @@ export default function MySessions({ sessions }) {
     }
 
     return (
-        <div className="min-h-screen bg-neutral-50 p-6">
+        <AppLayout title="Minhas sessões">
             <div className="mx-auto flex max-w-2xl flex-col gap-4">
-                {props.flash?.status && (
-                    <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700" role="status">
-                        {props.flash.status}
-                    </p>
-                )}
                 {props.errors?.session && (
                     <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
                         {props.errors.session}
                     </p>
                 )}
-
-                <h1 className="text-xl font-semibold">Minhas sessões</h1>
 
                 {sessions.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma sessão ainda.</p>}
 
@@ -95,6 +89,6 @@ export default function MySessions({ sessions }) {
                     </Card>
                 ))}
             </div>
-        </div>
+        </AppLayout>
     );
 }

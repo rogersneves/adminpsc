@@ -1,5 +1,6 @@
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import AppLayout from '@/Layouts/AppLayout';
 
 function Section({ title, children }) {
     return (
@@ -7,7 +8,7 @@ function Section({ title, children }) {
             <CardHeader>
                 <CardTitle className="text-base">{title}</CardTitle>
             </CardHeader>
-            <CardContent className="text-sm text-neutral-700">{children}</CardContent>
+            <CardContent className="text-sm text-muted-foreground">{children}</CardContent>
         </Card>
     );
 }
@@ -27,19 +28,18 @@ function KeyVals({ obj }) {
 
 export default function MyData({ data }) {
     return (
-        <div className="min-h-screen bg-neutral-50 p-6">
+        <AppLayout
+            title="Meus dados"
+            actions={
+                <a href="/lgpd/meus-dados/download" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                    Baixar (JSON)
+                </a>
+            }
+        >
             <div className="mx-auto flex max-w-2xl flex-col gap-4">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-xl font-semibold">Meus dados</h1>
-                        <p className="text-sm text-muted-foreground">
-                            Todos os dados pessoais que mantemos sobre você (LGPD, Art. 18).
-                        </p>
-                    </div>
-                    <a href="/lgpd/meus-dados/download" className={buttonVariants({ variant: 'outline' })}>
-                        Baixar (JSON)
-                    </a>
-                </div>
+                <p className="text-sm text-muted-foreground">
+                    Todos os dados pessoais que mantemos sobre você (LGPD, Art. 18).
+                </p>
 
                 <Section title="Conta">
                     <KeyVals obj={data.conta} />
@@ -99,6 +99,6 @@ export default function MyData({ data }) {
                     )}
                 </Section>
             </div>
-        </div>
+        </AppLayout>
     );
 }

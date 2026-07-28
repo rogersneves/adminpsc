@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import AppLayout from '@/Layouts/AppLayout';
 
 export default function Attendance({ rows }) {
     const { data, setData } = useForm({ from: '', to: '', patient_id: '' });
@@ -15,9 +16,8 @@ export default function Attendance({ rows }) {
     const query = new URLSearchParams(Object.fromEntries(Object.entries(data).filter(([, v]) => v))).toString();
 
     return (
-        <div className="min-h-screen bg-neutral-50 p-6">
+        <AppLayout title="Relatório de Comparecimento">
             <div className="mx-auto flex max-w-3xl flex-col gap-4">
-                <h1 className="text-xl font-semibold">Relatório de Comparecimento</h1>
                 <p className="text-sm text-muted-foreground">
                     Taxa = realizadas / (realizadas + não compareceu). Cancelamentos e reagendamentos não entram no cálculo.
                 </p>
@@ -76,6 +76,6 @@ export default function Attendance({ rows }) {
                     </CardContent>
                 </Card>
             </div>
-        </div>
+        </AppLayout>
     );
 }

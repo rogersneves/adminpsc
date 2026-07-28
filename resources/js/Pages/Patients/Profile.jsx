@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import InputError from '@/Components/InputError';
+import AppLayout from '@/Layouts/AppLayout';
 
 function calculateAge(birthDate) {
     if (!birthDate) return null;
@@ -66,14 +67,8 @@ export default function Profile({ patient }) {
     }
 
     return (
-        <div className="min-h-screen bg-neutral-50 p-6">
+        <AppLayout title="Meu perfil">
             <div className="mx-auto flex max-w-2xl flex-col gap-4">
-                {props.flash?.status && (
-                    <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700" role="status">
-                        {props.flash.status}
-                    </p>
-                )}
-
                 <Card>
                     <CardHeader>
                         <CardTitle>Completar perfil — {patient.display_name}</CardTitle>
@@ -130,8 +125,8 @@ export default function Profile({ patient }) {
                             </div>
 
                             {needsGuardian && !hasExistingGuardians && (
-                                <div className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
-                                    <p className="text-sm text-amber-800">
+                                <div className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3">
+                                    <p className="text-sm text-warning">
                                         Pacientes menores de 16 anos precisam de um responsável legal cadastrado.
                                     </p>
 
@@ -146,7 +141,7 @@ export default function Profile({ patient }) {
 
                                     <ul className="flex flex-col gap-1">
                                         {guardians.map((g, i) => (
-                                            <li key={i} className="flex items-center justify-between rounded bg-white px-2 py-1 text-sm">
+                                            <li key={i} className="flex items-center justify-between rounded bg-card px-2 py-1 text-sm ring-1 ring-border">
                                                 {g.name} ({g.relationship})
                                                 <button type="button" onClick={() => removeGuardian(i)} className="text-destructive">remover</button>
                                             </li>
@@ -161,6 +156,6 @@ export default function Profile({ patient }) {
                     </CardContent>
                 </Card>
             </div>
-        </div>
+        </AppLayout>
     );
 }

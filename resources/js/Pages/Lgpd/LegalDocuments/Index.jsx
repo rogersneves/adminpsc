@@ -1,21 +1,15 @@
 import { Link, usePage } from '@inertiajs/react';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import AppLayout from '@/Layouts/AppLayout';
 
 export default function Index({ documents, types }) {
     const { props } = usePage();
 
     return (
-        <div className="min-h-screen bg-neutral-50 p-6">
+        <AppLayout title="Documentos legais">
             <div className="mx-auto flex max-w-2xl flex-col gap-4">
-                {props.flash?.status && (
-                    <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700" role="status">
-                        {props.flash.status}
-                    </p>
-                )}
-
                 <div>
-                    <h1 className="text-xl font-semibold">Documentos legais</h1>
                     <p className="text-sm text-muted-foreground">
                         Política de privacidade e termos de uso. Publicar uma nova versão exige novo aceite dos usuários.
                     </p>
@@ -34,7 +28,7 @@ export default function Index({ documents, types }) {
                                     Publicar nova versão
                                 </Link>
                             </CardHeader>
-                            <CardContent className="text-sm text-neutral-700">
+                            <CardContent className="text-sm text-muted-foreground">
                                 {versions.length === 0 ? (
                                     <p className="text-muted-foreground">Nenhuma versão publicada.</p>
                                 ) : (
@@ -45,7 +39,7 @@ export default function Index({ documents, types }) {
                                                     v{d.version} — {d.title}
                                                 </span>
                                                 {d.is_current && (
-                                                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                                                    <span className="rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
                                                         Atual
                                                     </span>
                                                 )}
@@ -58,6 +52,6 @@ export default function Index({ documents, types }) {
                     );
                 })}
             </div>
-        </div>
+        </AppLayout>
     );
 }

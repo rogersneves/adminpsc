@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import AppLayout from '@/Layouts/AppLayout';
 
 const STATUS_LABELS = {
     em_aberto: 'Em aberto',
@@ -32,9 +33,8 @@ export default function Financial({ rows }) {
     const query = new URLSearchParams(Object.fromEntries(Object.entries(data).filter(([, v]) => v))).toString();
 
     return (
-        <div className="min-h-screen bg-neutral-50 p-6">
+        <AppLayout title="Relatório Financeiro">
             <div className="mx-auto flex max-w-3xl flex-col gap-4">
-                <h1 className="text-xl font-semibold">Relatório Financeiro</h1>
 
                 <Card>
                     <CardHeader>
@@ -108,6 +108,6 @@ export default function Financial({ rows }) {
                     </CardContent>
                 </Card>
             </div>
-        </div>
+        </AppLayout>
     );
 }

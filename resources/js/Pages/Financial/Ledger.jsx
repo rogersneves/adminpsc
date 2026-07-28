@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import InputError from '@/Components/InputError';
+import AppLayout from '@/Layouts/AppLayout';
 
 const STATUS_LABELS = {
     em_aberto: 'Em aberto',
@@ -15,12 +16,12 @@ const STATUS_LABELS = {
 };
 
 const STATUS_COLORS = {
-    em_aberto: 'bg-neutral-100 text-neutral-700',
-    pago: 'bg-emerald-50 text-emerald-700',
-    vencido: 'bg-red-50 text-red-700',
-    parcial: 'bg-amber-50 text-amber-700',
-    cancelado: 'bg-neutral-100 text-neutral-500 line-through',
-    estornado: 'bg-neutral-100 text-neutral-500',
+    em_aberto: 'bg-muted text-muted-foreground',
+    pago: 'bg-success/10 text-success',
+    vencido: 'bg-destructive/10 text-destructive',
+    parcial: 'bg-warning/10 text-warning',
+    cancelado: 'bg-muted text-muted-foreground line-through',
+    estornado: 'bg-muted text-muted-foreground',
 };
 
 const METHOD_LABELS = {
@@ -270,16 +271,8 @@ export default function Ledger({ patient, charges, availableSessions, canManage 
     const { props } = usePage();
 
     return (
-        <div className="min-h-screen bg-neutral-50 p-6">
+        <AppLayout title={`Financeiro — ${patient.display_name}`}>
             <div className="mx-auto flex max-w-2xl flex-col gap-4">
-                {props.flash?.status && (
-                    <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700" role="status">
-                        {props.flash.status}
-                    </p>
-                )}
-
-                <h1 className="text-xl font-semibold">Financeiro — {patient.display_name}</h1>
-
                 {canManage && <NewChargeForm patient={patient} availableSessions={availableSessions} />}
 
                 <div className="flex flex-col gap-3">
@@ -292,6 +285,6 @@ export default function Ledger({ patient, charges, availableSessions, canManage 
                     ))}
                 </div>
             </div>
-        </div>
+        </AppLayout>
     );
 }

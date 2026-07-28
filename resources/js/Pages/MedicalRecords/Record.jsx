@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import InputError from '@/Components/InputError';
+import AppLayout from '@/Layouts/AppLayout';
 
 function formatDateTime(iso) {
     return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
@@ -34,16 +35,8 @@ export default function Record({ patient, entries, availableSessions }) {
     const latest = entries[0];
 
     return (
-        <div className="min-h-screen bg-neutral-50 p-6">
+        <AppLayout title={`Prontuário — ${patient.display_name}`}>
             <div className="mx-auto flex max-w-2xl flex-col gap-4">
-                {props.flash?.status && (
-                    <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700" role="status">
-                        {props.flash.status}
-                    </p>
-                )}
-
-                <h1 className="text-xl font-semibold">Prontuário — {patient.display_name}</h1>
-
                 <Card>
                     <CardHeader>
                         <CardTitle>Nova entrada</CardTitle>
@@ -155,6 +148,6 @@ export default function Record({ patient, entries, availableSessions }) {
                     ))}
                 </div>
             </div>
-        </div>
+        </AppLayout>
     );
 }

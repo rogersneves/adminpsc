@@ -1,11 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import AppLayout from '@/Layouts/AppLayout';
 
 export default function WaitingList({ entries }) {
     return (
-        <div className="min-h-screen bg-neutral-50 p-6">
+        <AppLayout title="Lista de espera">
             <div className="mx-auto flex max-w-2xl flex-col gap-4">
-                <h1 className="text-xl font-semibold">Lista de espera</h1>
-
                 {entries.length === 0 && <p className="text-sm text-muted-foreground">Ninguém na lista de espera.</p>}
 
                 {entries.map((entry) => (
@@ -21,6 +20,6 @@ export default function WaitingList({ entries }) {
                     </Card>
                 ))}
             </div>
-        </div>
+        </AppLayout>
     );
 }
