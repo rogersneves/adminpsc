@@ -5,7 +5,13 @@ declare(strict_types=1);
 use Illuminate\Support\Facades\Route;
 use Modules\Scheduling\Http\Controllers\AgendaController;
 use Modules\Scheduling\Http\Controllers\SessionController;
+use Modules\Scheduling\Http\Controllers\UnitAgendaController;
 use Modules\Scheduling\Http\Controllers\WaitingListController;
+
+// Agenda por unidade (secretárias/admin) — escopo por unidade (marco: secretárias).
+Route::middleware(['auth', 'verified', 'resolve.tenant', 'can:manage-scheduling'])->group(function () {
+    Route::get('/agenda-unidade', [UnitAgendaController::class, 'index'])->name('scheduling.unit-agenda');
+});
 
 Route::middleware(['auth', 'verified', 'resolve.tenant'])->group(function () {
     Route::get('/agenda', [AgendaController::class, 'index'])->name('scheduling.agenda.index');

@@ -8,6 +8,7 @@ final readonly class RegisterPsychologistData
 {
     /**
      * @param  string[]  $specialties
+     * @param  string[]  $unitIds
      */
     public function __construct(
         public string $name,
@@ -15,5 +16,6 @@ final readonly class RegisterPsychologistData
         public string $professionalRegistry,
         public array $specialties,
         public int $defaultSessionDurationMinutes,
+        public array $unitIds = [],
     ) {}
 }

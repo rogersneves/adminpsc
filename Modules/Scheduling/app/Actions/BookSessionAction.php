@@ -42,10 +42,15 @@ class BookSessionAction
                 throw new SlotNoLongerAvailableException('Esse horário não está mais disponível.');
             }
 
+            // Unidade onde a sessão ocorre = unidade do psicólogo (marco: múltiplas
+            // unidades). Null quando a clínica não usa unidades — compatível com o legado.
+            $unitId = DB::table('unit_user')->where('user_id', $lockedPsychologist->user_id)->value('unit_id');
+
             return Session::query()->create([
                 'tenant_id' => $patient->tenant_id,
                 'patient_id' => $patient->id,
                 'psychologist_id' => $lockedPsychologist->id,
+                'unit_id' => $unitId,
                 'scheduled_at' => $startsAt,
                 'duration_minutes' => $durationMinutes,
                 'modality' => $modality,

@@ -24,6 +24,8 @@ class RegisterPsychologistRequest extends FormRequest
             'specialties' => ['nullable', 'array'],
             'specialties.*' => ['string', 'max:100'],
             'default_session_duration_minutes' => ['nullable', 'integer', 'min:10', 'max:240'],
+            'unit_ids' => ['nullable', 'array'],
+            'unit_ids.*' => ['string'],
         ];
     }
 
@@ -35,6 +37,7 @@ class RegisterPsychologistRequest extends FormRequest
             professionalRegistry: $this->string('professional_registry')->toString(),
             specialties: $this->input('specialties', []),
             defaultSessionDurationMinutes: (int) $this->input('default_session_duration_minutes', 50),
+            unitIds: $this->input('unit_ids', []),
         );
     }
 }

@@ -73,6 +73,7 @@ class HandleInertiaRequests extends Middleware
         $permissions = [
             'manage-users', 'manage-financial', 'manage-cms', 'manage-legal',
             'manage-clinic-settings', 'view-audit-log', 'platform.manage-tenants',
+            'manage-scheduling',
         ];
 
         $can = [];

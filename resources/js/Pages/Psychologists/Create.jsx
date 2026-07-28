@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import InputError from '@/components/InputError';
 import AppLayout from '@/Layouts/AppLayout';
 
-export default function Create() {
+export default function Create({ units = [] }) {
     const [specialtyInput, setSpecialtyInput] = useState('');
 
     const { data, setData, post, processing, errors } = useForm({
@@ -16,7 +16,11 @@ export default function Create() {
         professional_registry: '',
         specialties: [],
         default_session_duration_minutes: 50,
+        unit_ids: [],
     });
+
+    const toggleUnit = (id) =>
+        setData('unit_ids', data.unit_ids.includes(id) ? data.unit_ids.filter((u) => u !== id) : [...data.unit_ids, id]);
 
     function addSpecialty() {
         if (!specialtyInput.trim()) return;
@@ -93,6 +97,24 @@ export default function Create() {
                                     ))}
                                 </ul>
                             </div>
+
+                            {units.length > 0 && (
+                                <div className="flex flex-col gap-1.5">
+                                    <Label>Unidades</Label>
+                                    <div className="flex flex-col gap-1 text-sm">
+                                        {units.map((unit) => (
+                                            <label key={unit.id} className="flex items-center gap-2">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={data.unit_ids.includes(unit.id)}
+                                                    onChange={() => toggleUnit(unit.id)}
+                                                />
+                                                {unit.name}
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             <Button type="submit" disabled={processing}>Cadastrar</Button>
                         </form>

@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Modules\Psychologists\DTOs\RegisterPsychologistData;
 use Modules\Psychologists\Models\Psychologist;
+use Modules\Settings\Models\Unit;
 use Modules\Settings\Services\PlanLimits;
 use Modules\Users\Models\User;
 
@@ -45,6 +46,17 @@ class RegisterPsychologistAction
                 'specialties' => $data->specialties,
                 'default_session_duration_minutes' => $data->defaultSessionDurationMinutes,
             ]);
+
+            // Vínculo com unidades (marco: múltiplas unidades) — só unidades do tenant.
+            if ($data->unitIds !== []) {
+                $validUnitIds = Unit::query()
+                    ->withoutTenantScope()
+                    ->where('tenant_id', $actor->tenant_id)
+                    ->whereIn('id', $data->unitIds)
+                    ->pluck('id');
+
+                $user->units()->sync($validUnitIds);
+            }
 
             return $user;
         });

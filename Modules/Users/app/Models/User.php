@@ -12,6 +12,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Modules\Core\Traits\HasUuidPrimaryKey;
 use Modules\Security\Casts\EnvelopeEncrypted;
+use Modules\Settings\Models\Unit;
 use Modules\Tenant\Models\Tenant;
 use Modules\Users\Database\Factories\UserFactory;
 use Spatie\Permission\Traits\HasRoles;
@@ -36,6 +37,15 @@ class User extends Authenticatable implements MustVerifyEmail
     public function tenant()
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    /**
+     * Unidades (filiais) a que este usuário está lotado (psicólogo/secretária).
+     * Base do escopo de secretária. Ver Modules\Settings.
+     */
+    public function units()
+    {
+        return $this->belongsToMany(Unit::class, 'unit_user');
     }
 
     protected function casts(): array

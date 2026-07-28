@@ -11,6 +11,7 @@ use Modules\Patients\Models\Patient;
 use Modules\Psychologists\Models\Psychologist;
 use Modules\Scheduling\Enums\SessionModality;
 use Modules\Scheduling\Enums\SessionStatus;
+use Modules\Settings\Models\Unit;
 use Modules\Tenant\Traits\BelongsToTenant;
 
 /**
@@ -27,6 +28,7 @@ class Session extends Model
         'tenant_id',
         'patient_id',
         'psychologist_id',
+        'unit_id',
         'scheduled_at',
         'duration_minutes',
         'modality',
@@ -43,6 +45,11 @@ class Session extends Model
     public function psychologist()
     {
         return $this->belongsTo(Psychologist::class);
+    }
+
+    public function unit()
+    {
+        return $this->belongsTo(Unit::class);
     }
 
     public function rescheduledFrom()

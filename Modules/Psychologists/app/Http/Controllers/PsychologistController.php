@@ -14,6 +14,7 @@ use Modules\Psychologists\Actions\RegisterPsychologistAction;
 use Modules\Psychologists\Http\Requests\RegisterPsychologistRequest;
 use Modules\Psychologists\Models\Psychologist;
 use Modules\Settings\Exceptions\PlanLimitReachedException;
+use Modules\Settings\Models\Unit;
 
 class PsychologistController extends Controller
 {
@@ -40,7 +41,14 @@ class PsychologistController extends Controller
     {
         $this->authorize('create', Psychologist::class);
 
-        return Inertia::render('Psychologists/Create');
+        // Unidades ativas do tenant, para vincular o psicólogo (marco: múltiplas unidades).
+        $units = Unit::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get()
+            ->map(fn ($u) => ['id' => $u->id, 'name' => $u->name]);
+
+        return Inertia::render('Psychologists/Create', ['units' => $units]);
     }
 
     public function store(RegisterPsychologistRequest $request, RegisterPsychologistAction $action): RedirectResponse

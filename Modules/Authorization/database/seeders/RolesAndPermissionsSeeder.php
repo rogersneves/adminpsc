@@ -34,6 +34,8 @@ class RolesAndPermissionsSeeder extends Seeder
         'manage-financial',
         'manage-cms',
         'manage-legal',
+        // Gestão de agenda por escopo de unidade (marco: secretárias).
+        'manage-scheduling',
     ];
 
     public function run(): void
@@ -62,12 +64,21 @@ class RolesAndPermissionsSeeder extends Seeder
             'manage-cms',
             // Gestão dos documentos legais / LGPD (Fase 10).
             'manage-legal',
+            // Admin da clínica também gerencia a agenda das unidades.
+            'manage-scheduling',
         ]);
 
         // Primeira permissão real do papel `financeiro` (seedado desde a Fase 1, sem
         // uso até a Fase 5).
         Role::findByName('financeiro', 'web')->syncPermissions([
             'manage-financial',
+        ]);
+
+        // Primeira permissão real do papel `secretaria` (seedado desde a Fase 1, sem
+        // uso até aqui): gerencia a agenda das unidades a que está lotada. O escopo de
+        // unidade é aplicado por consulta (unit_user), não por permissão.
+        Role::findByName('secretaria', 'web')->syncPermissions([
+            'manage-scheduling',
         ]);
     }
 }
