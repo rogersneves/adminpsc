@@ -1,5 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Brandmark } from '@/Components/Brandmark';
+import { Brandmark } from '@/components/Brandmark';
 
 export default function GuestLayout({ title, description, status, children }) {
     return (

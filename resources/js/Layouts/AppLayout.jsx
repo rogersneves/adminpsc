@@ -17,8 +17,8 @@ import {
     Wallet,
     X,
 } from 'lucide-react';
-import { Brandmark } from '@/Components/Brandmark';
-import { ThemeToggle } from '@/Components/ThemeToggle';
+import { Brandmark } from '@/components/Brandmark';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 function buildNav(user) {
     const roles = user?.roles ?? [];
