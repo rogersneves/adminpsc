@@ -120,12 +120,15 @@ this codebase builds explicit attribute arrays and never forwards raw request in
 RolesAndPermissionsSeeder` (called from `DatabaseSeeder`). 7 roles: `super_admin`, `admin_clinica`,
 `psicologo`, `secretaria`, `financeiro`, `paciente`, `responsavel_legal`. Seeded permissions:
 `super_admin` gets all (`manage-users`, `manage-clinic-settings`, `view-audit-log`,
-`platform.manage-tenants`, `manage-financial`, `manage-cms`, `manage-legal`); `admin_clinica` gets all
-but `platform.manage-tenants`; `financeiro` gets `manage-financial` (Fase 5). `manage-cms` (Fase 8) and
-`manage-legal` (Fase 10, LGPD documents) are on `super_admin`/`admin_clinica`. **Fase 11 finally exercises
-two long-seeded-but-unused permissions:** `manage-clinic-settings` gates `/configuracoes` (per-tenant
-settings) and `platform.manage-tenants` gates `/plataforma/tenants` (Super-Admin cross-tenant management).
-The remaining roles earn permissions as their modules ship.
+`platform.manage-tenants`, `manage-financial`, `manage-cms`, `manage-legal`, `manage-scheduling`);
+`admin_clinica` gets all but `platform.manage-tenants`; `financeiro` gets `manage-financial` (Fase 5).
+`manage-cms` (Fase 8) and `manage-legal` (Fase 10, LGPD documents) are on `super_admin`/`admin_clinica`.
+**Fase 11 finally exercises two long-seeded-but-unused permissions:** `manage-clinic-settings` gates
+`/configuracoes` (per-tenant settings) and `platform.manage-tenants` gates `/plataforma/tenants`
+(Super-Admin cross-tenant management). **The "marcos" work then activated the last idle role:**
+`manage-scheduling` (units/secretaries marco) is on `super_admin`/`admin_clinica`/**`secretaria`** — the
+first real permission the `secretaria` role has held since Fase 1. The remaining roles earn permissions as
+their modules ship.
 
 **Authentication flow (Fase 1, done):** registration (`POST /register`) creates a `Tenant` + `User`
 (role `admin_clinica`) and logs the user in immediately without MFA (see the ADR-style comment in
@@ -389,6 +392,31 @@ their own; `Tenant` isn't `BelongsToTenant` so binding works unscoped). Per-tena
 Inertia shared prop (`branding` in `HandleInertiaRequests`). ADR-003 (column isolation) was re-evaluated
 and **kept** — documented as ADR-007 in `docs/01`; physical isolation stays a per-client future trigger,
 not the default topology.
+
+**Marcos pós-Fase-11 (vision items, done):** two of `docs/06-Roadmap.md`'s unnumbered "Marcos futuros".
+**(1) Multi-unit + secretaries.** `Modules\Settings\Models\Unit` (`units`, per-tenant branches) + CRUD
+(`/unidades`, `manage-clinic-settings`); a `unit_user` **pure pivot** (composite PK `(unit_id, user_id)`,
+**no own `id`** — a uuid PK with no default breaks `belongsToMany::sync()` on strict MySQL) assigns
+psychologists/secretaries to units; `clinical_sessions.unit_id` (nullable) is stamped by
+`BookSessionAction` from the psychologist's unit. The dormant `secretaria` role is now live: permission
+`manage-scheduling`, invite via `/secretarias` (`InviteSecretaryAction`, same reset-link pattern as
+psychologists), and **unit scoping** via `Modules\Settings\Services\UnitScope` — `unitIdsFor()` returns
+`null` for admin (all units) or the secretary's assigned unit ids, driving the read-only
+`/agenda-unidade`. Psychologists get a units multiselect on their create form. **(2) Convênios +
+teleconsulta.** `Modules\Financial\Models\HealthPlan` (`health_plans`) + CRUD (`/convenios`,
+`manage-financial`); the patient picks their plan on `/paciente/perfil` (`patients.health_plan_id`), and
+a charge **inherits the patient's plan** (`financial_charges.health_plan_id`, set in `CreateChargeAction`).
+Teleconsulta is `clinical_sessions.meeting_url` (nullable): psychologist/staff set the link
+(`POST /sessoes/{id}/teleconsulta`, authorized by `SessionPolicy::markStatus`, editable from the unit
+agenda) and the patient sees "Entrar na teleconsulta" on `/minhas-sessoes` — **no video integration, the
+link is entered manually** (same spirit as Fase 5's manual PIX). **E-signature and NFe are contracts only**
+(`Modules\MedicalRecords\Contracts\SignatureProviderInterface`,
+`Modules\Payments\Contracts\InvoiceIssuerInterface`) — no implementation/binding, exactly like
+`PaymentGatewayInterface`: they need a contracted provider (Clicksign/D4Sign; Focus NFe/eNotas). New
+cross-module migrations live in the module whose feature owns the column (Settings owns `units`/
+`unit_user`/`clinical_sessions.unit_id`; Financial owns `health_plans` + the `patients`/`financial_charges`
+FKs; Scheduling owns `meeting_url`) — same precedent as Notifications/Security altering other modules'
+tables.
 
 **Frontend:** Inertia pages live in `resources/js/Pages` (root) or `Modules/{Name}/resources/js/Pages`
 (per module). shadcn/ui components are copied into `resources/js/components/ui` (lowercase, per the
@@ -757,14 +785,17 @@ documents, append-only consent with global re-consent gating, Art. 18 self-servi
 access/portability, and irreversible patient anonymization (`Modules\Security` `Lgpd` namespace, Fase 10);
 config-defined plans with limit enforcement, tenant provisioning with trial, per-tenant settings over a
 config-fallback layer, Super-Admin cross-tenant management, and per-tenant branding (`Modules\Settings`,
-Fase 11). 202 PHPUnit tests, plus eleven
-manual end-to-end passes against real MySQL (one per phase — most caught a real bug or a real gotcha
-PHPUnit missed, see the gotchas sections above — keep doing the manual pass every phase regardless of
-whether a given phase turns up nothing new).
+Fase 11); the full AdminPSC visual identity (brand tokens, Manrope, dark mode, per-tenant primary colour,
+authenticated app shell with role-aware sidebar + theme toggle across all pages); and two roadmap
+"marcos" — multi-unit + scoped secretaries, and convênios + teleconsulta. 220 PHPUnit tests, plus manual
+end-to-end passes against real MySQL (per phase and per marco — most caught a real bug or a real gotcha
+PHPUnit missed, see the gotchas sections above — keep doing the manual pass regardless of whether a given
+increment turns up nothing new).
 
-**All eleven numbered phases (Fase 0–11) of `docs/06-Roadmap.md` are complete.** What remains is the
-roadmap's "Marcos futuros" (unnumbered vision: real payment gateways/PIX, teleconsulta, e-signature,
-NFe, mobile app, public REST API, SMS/WhatsApp channels) plus the per-phase deferrals below. Not built:
+**All eleven numbered phases (Fase 0–11) of `docs/06-Roadmap.md` are complete, plus the first two
+"Marcos futuros".** What remains is the rest of the roadmap's "Marcos futuros" (unnumbered vision: real
+payment gateways/PIX, e-signature + NFe — contracts exist, no provider —, mobile app, public REST API,
+SMS/WhatsApp channels) plus the per-phase/per-marco deferrals below. Not built:
 admin-facing patient
 list/management UI, psychologist profile editing, Secretária/Financeiro staff invites, guardian portal
 access (Fase 2 deferrals); automatic waiting-list notification when a slot opens (the module exists now,

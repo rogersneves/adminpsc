@@ -159,3 +159,20 @@ registrado como ADR à parte quando/se for implementado.
 - `audit_logs (tenant_id, created_at)` — consultas por período.
 - Toda tabela com `tenant_id` + soft delete: índice composto incluindo `deleted_at` quando queries
   filtram ativos com frequência.
+
+## Tabelas dos marcos pós-Fase-11 (múltiplas unidades, secretárias, convênios, teleconsulta)
+
+- `units (id, tenant_id, name, city?, is_active, timestamps, soft_deletes)` — filiais da clínica.
+- `unit_user (unit_id, user_id)` — **pivot puro, PK composta, sem `id` próprio** (uma `uuid id` sem
+  default quebraria o `belongsToMany::sync()` no MySQL estrito). Vincula psicólogos/secretárias a unidades.
+- `clinical_sessions.unit_id` (FK nullable → `units`) — unidade onde a sessão ocorre; preenchida pela
+  `BookSessionAction` a partir da unidade do psicólogo.
+- `health_plans (id, tenant_id, name, is_active, timestamps, soft_deletes)` — convênios aceitos.
+- `patients.health_plan_id` / `financial_charges.health_plan_id` (FK nullable → `health_plans`) — convênio
+  do paciente e da cobrança (a cobrança herda o do paciente); `null` = particular.
+- `clinical_sessions.meeting_url` (string nullable) — link da teleconsulta (sessão online); informado
+  manualmente, sem integração de vídeo.
+
+Migrations vivem no módulo dono do recurso (Settings: `units`/`unit_user`/`clinical_sessions.unit_id`;
+Financial: `health_plans` + FKs de `patients`/`financial_charges`; Scheduling: `meeting_url`) — mesmo
+precedente de Notifications/Security alterando tabelas de outros módulos.
