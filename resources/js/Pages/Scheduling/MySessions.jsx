@@ -56,8 +56,21 @@ export default function MySessions({ sessions }) {
                             <CardTitle>{session.psychologist_name}</CardTitle>
                             <CardDescription>
                                 {formatDateTime(session.scheduled_at)} · {STATUS_LABELS[session.status] ?? session.status}
+                                {session.modality === 'online' && ' · Online'}
                             </CardDescription>
                         </CardHeader>
+                        {session.modality === 'online' && session.meeting_url && session.status === 'agendada' && (
+                            <CardContent className="pb-0">
+                                <a
+                                    href={session.meeting_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary underline"
+                                >
+                                    Entrar na teleconsulta
+                                </a>
+                            </CardContent>
+                        )}
                         {session.status === 'agendada' && (
                             <CardContent className="flex flex-col gap-3">
                                 {reschedulingId === session.id ? (

@@ -2,11 +2,11 @@
 
 namespace Modules\Patients\Providers;
 
-use Illuminate\Support\Facades\Gate;
-use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Gate;
 use Modules\Patients\Models\Patient;
 use Modules\Patients\Policies\PatientPolicy;
+use Nwidart\Modules\Support\ModuleServiceProvider;
 
 class PatientsServiceProvider extends ModuleServiceProvider
 {
@@ -47,7 +47,7 @@ class PatientsServiceProvider extends ModuleServiceProvider
     /**
      * Define module schedules.
      *
-     * @param $schedule
+     * @param  $schedule
      */
     // protected function configureSchedules(Schedule $schedule): void
     // {

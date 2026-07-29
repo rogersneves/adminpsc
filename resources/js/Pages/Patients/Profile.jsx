@@ -19,7 +19,7 @@ function calculateAge(birthDate) {
     return age;
 }
 
-export default function Profile({ patient }) {
+export default function Profile({ patient, healthPlans = [] }) {
     const { props } = usePage();
     const [phoneInput, setPhoneInput] = useState('');
     const [guardians, setGuardians] = useState([]);
@@ -30,6 +30,7 @@ export default function Profile({ patient }) {
         birth_date: patient.birth_date ?? '',
         phones: patient.phones ?? [],
         address: patient.address ?? '',
+        health_plan_id: patient.health_plan_id ?? '',
         guardians: [],
     });
 
@@ -103,6 +104,24 @@ export default function Profile({ patient }) {
                                 <Input id="address" value={data.address} onChange={(e) => setData('address', e.target.value)} />
                                 <InputError message={errors.address} />
                             </div>
+
+                            {healthPlans.length > 0 && (
+                                <div className="flex flex-col gap-1.5">
+                                    <Label htmlFor="health_plan_id">Convênio</Label>
+                                    <select
+                                        id="health_plan_id"
+                                        className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm"
+                                        value={data.health_plan_id}
+                                        onChange={(e) => setData('health_plan_id', e.target.value)}
+                                    >
+                                        <option value="">Particular (sem convênio)</option>
+                                        {healthPlans.map((plan) => (
+                                            <option key={plan.id} value={plan.id}>{plan.name}</option>
+                                        ))}
+                                    </select>
+                                    <InputError message={errors.health_plan_id} />
+                                </div>
+                            )}
 
                             <div className="flex flex-col gap-1.5">
                                 <Label>Telefones</Label>

@@ -23,6 +23,7 @@ Route::middleware(['auth', 'verified', 'resolve.tenant'])->group(function () {
     Route::get('/minhas-sessoes', [SessionController::class, 'mine'])->name('scheduling.my-sessions');
     Route::post('/sessoes/{session}/cancelar', [SessionController::class, 'cancel'])->name('scheduling.sessions.cancel');
     Route::post('/sessoes/{session}/reagendar', [SessionController::class, 'reschedule'])->name('scheduling.sessions.reschedule');
+    Route::post('/sessoes/{session}/teleconsulta', [SessionController::class, 'setMeetingUrl'])->name('scheduling.sessions.meeting');
     Route::post('/sessoes/{session}/marcar-realizada', [SessionController::class, 'markRealizada'])
         ->name('scheduling.sessions.mark-realizada');
     Route::post('/sessoes/{session}/marcar-nao-compareceu', [SessionController::class, 'markNaoCompareceu'])

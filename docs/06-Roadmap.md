@@ -419,8 +419,27 @@ instalado (sem dados), configuração de ambiente (MySQL, fila database).
   implementado); telas de billing/faturas e histórico de mudança de plano.
 
 ## Marcos futuros (fora de fases numeradas, mantidos como visão)
-- Múltiplos psicólogos por clínica, múltiplas unidades, secretárias com escopo próprio.
-- Convênios, teleconsulta, assinatura eletrônica, emissão de notas fiscais.
+- ~~Múltiplos psicólogos por clínica, múltiplas unidades, secretárias com escopo próprio.~~ **(concluído)**
+  Múltiplos psicólogos já existiam desde a Fase 2/11. **Unidades** (filiais): modelo `Unit` + CRUD
+  (`/unidades`, `manage-clinic-settings`), pivot `unit_user` vinculando psicólogos/secretárias a unidades,
+  `clinical_sessions.unit_id` preenchido pela `BookSessionAction` a partir da unidade do psicólogo. **Papel
+  `secretaria` ativado** (seedado sem uso desde a Fase 1): permissão `manage-scheduling`, convite via
+  `/secretarias` (`InviteSecretaryAction`), e escopo por unidade (`Modules\Settings\Services\UnitScope`) —
+  a secretária só vê a agenda das suas unidades (`/agenda-unidade`), o admin vê todas. Pendências:
+  transferência de sessão entre unidades, relatórios por unidade, edição de vínculo unidade↔psicólogo
+  fora do cadastro inicial.
+- ~~Convênios, teleconsulta,~~ assinatura eletrônica, emissão de notas fiscais. **(convênios + teleconsulta
+  concluídos; assinatura e NFe = contratos documentados)** **Convênios**: modelo `HealthPlan` + CRUD
+  (`/convenios`, `manage-financial`); paciente escolhe o convênio no perfil (`patients.health_plan_id`), e
+  a cobrança herda o convênio do paciente (`financial_charges.health_plan_id`, `CreateChargeAction`).
+  **Teleconsulta**: `clinical_sessions.meeting_url` (nullable) — o psicólogo/staff define o link da sessão
+  online (`POST /sessoes/{id}/teleconsulta`, autorizado por `SessionPolicy::markStatus`, editável na
+  agenda da unidade) e o paciente vê "Entrar na teleconsulta" em `/minhas-sessoes`; sem integração de
+  vídeo (link manual, mesmo espírito do PIX manual da Fase 5). **Assinatura eletrônica** e **NFe** ficam
+  como **contratos** (`Modules\MedicalRecords\Contracts\SignatureProviderInterface`,
+  `Modules\Payments\Contracts\InvoiceIssuerInterface`) sem implementação/binding — dependem de provedor
+  contratado (Clicksign/D4Sign; Focus NFe/eNotas), mesmo padrão do `PaymentGatewayInterface`. Pendências
+  de convênios: faturamento ao convênio (guias/TISS), convênio por cobrança na UI (hoje herda do paciente).
 - Gateways de pagamento reais e PIX.
 - Aplicativo móvel.
 - API pública REST (o desacoplamento Actions/Services já feito desde a Fase 0 evita refatoração

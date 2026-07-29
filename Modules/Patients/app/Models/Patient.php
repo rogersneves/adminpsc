@@ -20,6 +20,7 @@ class Patient extends Model
     protected $fillable = [
         'tenant_id',
         'user_id',
+        'health_plan_id',
         'display_name',
         'email',
         'document_number_encrypted',

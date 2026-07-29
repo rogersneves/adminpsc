@@ -9,6 +9,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Modules\Financial\Models\HealthPlan;
 use Modules\Patients\Actions\UpdatePatientProfileAction;
 use Modules\Patients\Http\Requests\UpdatePatientProfileRequest;
 use Modules\Patients\Models\Patient;
@@ -29,11 +30,18 @@ class PatientProfileController extends Controller
                 'phones' => $patient->phones_encrypted ?? [],
                 'emergency_contacts' => $patient->emergency_contacts_encrypted ?? [],
                 'address' => $patient->address_encrypted,
+                'health_plan_id' => $patient->health_plan_id,
                 'guardians' => $patient->guardians->map(fn ($guardian) => [
                     'name' => $guardian->name,
                     'relationship' => $guardian->relationship,
                 ]),
             ],
+            // Convênios ativos da clínica (marco: convênios).
+            'healthPlans' => HealthPlan::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get()
+                ->map(fn ($p) => ['id' => $p->id, 'name' => $p->name]),
         ]);
     }
 

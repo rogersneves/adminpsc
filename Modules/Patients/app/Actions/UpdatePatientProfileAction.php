@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Modules\Patients\Actions;
 
 use Illuminate\Support\Facades\DB;
+use Modules\Financial\Models\HealthPlan;
 use Modules\Guardians\Actions\SyncPatientGuardiansAction;
 use Modules\Patients\Models\Patient;
 use Modules\Security\Services\EncryptionService;
@@ -37,6 +38,11 @@ class UpdatePatientProfileAction
                 'address_encrypted' => $data['address'] ?? $patient->address_encrypted,
             ]);
 
+            // Convênio (marco: convênios) — só aceita um plano do próprio tenant; ''/null limpa.
+            if (array_key_exists('health_plan_id', $data)) {
+                $patient->health_plan_id = $this->resolveHealthPlanId($patient, $data['health_plan_id']);
+            }
+
             $patient->save();
 
             if (! empty($data['guardians'])) {
@@ -45,6 +51,21 @@ class UpdatePatientProfileAction
         });
 
         return $patient->fresh();
+    }
+
+    private function resolveHealthPlanId(Patient $patient, ?string $healthPlanId): ?string
+    {
+        if ($healthPlanId === null || $healthPlanId === '') {
+            return null;
+        }
+
+        $belongs = HealthPlan::query()
+            ->withoutTenantScope()
+            ->where('tenant_id', $patient->tenant_id)
+            ->whereKey($healthPlanId)
+            ->exists();
+
+        return $belongs ? $healthPlanId : null;
     }
 
     private function normalizeDocumentNumber(?string $value): ?string

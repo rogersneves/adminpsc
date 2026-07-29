@@ -26,6 +26,7 @@ class UpdatePatientProfileRequest extends FormRequest
             'emergency_contacts.*.name' => ['required_with:emergency_contacts', 'string'],
             'emergency_contacts.*.phone' => ['required_with:emergency_contacts', 'string'],
             'address' => ['nullable', 'string', 'max:500'],
+            'health_plan_id' => ['nullable', 'string'],
             'guardians' => ['nullable', 'array'],
             'guardians.*.name' => ['required_with:guardians', 'string', 'max:255'],
             'guardians.*.relationship' => ['required_with:guardians', 'string', 'max:32'],

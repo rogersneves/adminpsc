@@ -35,6 +35,8 @@ class UnitAgendaController extends Controller
                 'id' => $session->id,
                 'scheduled_at' => $session->scheduled_at?->toIso8601String(),
                 'status' => $session->status->value,
+                'modality' => $session->modality->value,
+                'meeting_url' => $session->meeting_url,
                 'patient_name' => $session->patient?->display_name,
                 'psychologist_name' => $session->psychologist?->user?->name,
                 'unit_name' => $session->unit?->name,

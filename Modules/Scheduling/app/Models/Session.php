@@ -32,6 +32,7 @@ class Session extends Model
         'scheduled_at',
         'duration_minutes',
         'modality',
+        'meeting_url',
         'status',
         'rescheduled_from_id',
         'reminder_sent_at',

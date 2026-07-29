@@ -41,6 +41,8 @@ class CreateChargeAction
                 $charges->push(FinancialCharge::query()->create([
                     'tenant_id' => $patient->tenant_id,
                     'patient_id' => $patient->id,
+                    // Cobrança herda o convênio do paciente (marco: convênios).
+                    'health_plan_id' => $patient->health_plan_id,
                     'session_id' => $session?->id,
                     'amount' => $amounts[$i],
                     'discount_amount' => $discounts[$i],

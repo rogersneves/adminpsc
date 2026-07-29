@@ -2,11 +2,11 @@
 
 namespace Modules\Financial\Providers;
 
-use Illuminate\Support\Facades\Gate;
-use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Gate;
 use Modules\Financial\Console\Commands\ApplyLateChargeFees;
 use Modules\Financial\Policies\FinancialPolicy;
+use Nwidart\Modules\Support\ModuleServiceProvider;
 
 class FinancialServiceProvider extends ModuleServiceProvider
 {
@@ -52,8 +52,6 @@ class FinancialServiceProvider extends ModuleServiceProvider
 
     /**
      * Define module schedules.
-     *
-     * @param $schedule
      */
     protected function configureSchedules(Schedule $schedule): void
     {

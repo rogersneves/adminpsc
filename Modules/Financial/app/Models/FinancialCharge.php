@@ -20,6 +20,7 @@ class FinancialCharge extends Model
     protected $fillable = [
         'tenant_id',
         'patient_id',
+        'health_plan_id',
         'session_id',
         'amount',
         'discount_amount',

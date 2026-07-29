@@ -85,6 +85,23 @@ class SessionController extends Controller
         return back()->with('status', 'Sessão marcada como não compareceu.');
     }
 
+    /**
+     * Teleconsulta (marco): o psicólogo (ou staff) define/limpa o link de vídeo da
+     * sessão online. Sem integração com provedor — o link é informado manualmente.
+     */
+    public function setMeetingUrl(Request $request, Session $session): RedirectResponse
+    {
+        $this->authorize('markStatus', $session);
+
+        $validated = $request->validate([
+            'meeting_url' => ['nullable', 'url', 'max:500'],
+        ]);
+
+        $session->update(['meeting_url' => $validated['meeting_url'] ?? null]);
+
+        return back()->with('status', 'Link da teleconsulta atualizado.');
+    }
+
     private function toArray(Session $session): array
     {
         return [
@@ -93,6 +110,7 @@ class SessionController extends Controller
             'scheduled_at' => $session->scheduled_at->toIso8601String(),
             'duration_minutes' => $session->duration_minutes,
             'modality' => $session->modality->value,
+            'meeting_url' => $session->meeting_url,
             'status' => $session->status->value,
         ];
     }
