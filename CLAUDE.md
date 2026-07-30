@@ -418,6 +418,25 @@ cross-module migrations live in the module whose feature owns the column (Settin
 FKs; Scheduling owns `meeting_url`) — same precedent as Notifications/Security altering other modules'
 tables.
 
+**Public REST API (marco, foundation done):** `laravel/sanctum` (Bearer tokens). The
+`personal_access_tokens` migration was published and edited to **`uuidMorphs('tokenable')`** (not
+`morphs`) because `User` has a UUID PK — same class of fix as `model_has_roles` (Fase 1) and the
+`notifications` table (Fase 7); with `morphs` (bigint `tokenable_id`) a token would never match a user.
+A `sanctum` guard was added to `config/auth.php` (`driver: sanctum`). **Tokens are minted by the user
+themselves in the authenticated web area (`/api-tokens`, `ApiTokenController`) — there is NO API login
+endpoint**, so the API can't bypass the app's mandatory MFA; the plaintext token is shown once (via flash)
+then only the hash remains. The API lives in a **central `routes/api.php`** (registered via
+`withRouting(api:)` in `bootstrap/app.php`), under `/api/v1` with `auth:sanctum` + `throttle:60,1` +
+`resolve.tenant`; controllers in `app/Http/Controllers/Api/V1/`. **Every endpoint reuses the SAME
+Actions/queries as the Inertia controllers** — `POST /api/v1/sessions` calls the exact same
+`BookSessionAction` (Fase 3 double-booking lock included), proving the Fase-0 Actions/Services↔HTTP
+decoupling. **`ResolveTenant` now reads `$request->user()` instead of `Auth::user()`** so it's
+guard-agnostic — the tenant resolves from the token owner on API requests and from the session on web
+requests (same middleware, both guards). v1 endpoints: `GET /me`, `GET /psychologists`, `GET /sessions`,
+`POST /sessions`, `GET /charges`. Testing gotcha: Sanctum's `RequestGuard` caches the resolved user within
+one test process, so a "revoked token now fails" test must call `$this->app['auth']->forgetGuards()`
+between the two HTTP calls to simulate separate real requests (`ApiV1Test`).
+
 **Frontend:** Inertia pages live in `resources/js/Pages` (root) or `Modules/{Name}/resources/js/Pages`
 (per module). shadcn/ui components are copied into `resources/js/components/ui` (lowercase, per the
 shadcn CLI convention — see `components.json`) and customized directly, not installed as a runtime
@@ -563,6 +582,17 @@ back to v2. Flagged here in case there was a specific reason v2 was required.
 
 ## Gotchas hit during Fase 6
 
+- **The full test suite crashes the PHP process on this WAMP/Windows (ZTS) build once it's long enough —
+  at `Reports\ExportsSmokeTest` (the Excel/`maatwebsite-excel`+`zipstream` writer), `Fatal error:
+  Premature end of PHP process` at a 16MB `fread` on the zip stream.** It is **not** OOM (memory sits ~112MB,
+  and `-d memory_limit=1024M` doesn't help) and **not** a code regression — the export test passes in
+  isolation (`php artisan test tests/Feature/Reports` → green). It's a hard crash of the ZTS Windows PHP
+  worker when the Excel writer runs late in a long sequential run; once the suite grew past ~220 tests the
+  export test lands past that threshold and the process dies, aborting everything after it. **Workaround
+  for a clean green: run the suite in two batches** so no single process lives long enough —
+  e.g. everything except Reports in one `php artisan test <dirs…>`, and `tests/Unit/Reports
+  tests/Feature/Reports` in another. Both pass; the crash is purely single-process longevity, same family
+  as the `pail`/`composer dev` Windows issue below. (CI on Linux/NTS would not hit this.)
 - **`php artisan pail` doesn't work on this WAMP/Windows setup — it needs the `pcntl` extension, which
   doesn't exist on Windows PHP builds.** Running `composer dev` (which wraps `server`/`queue`/`logs`/`vite`
   in one `concurrently --kill-others` call) starts all four, `pail` immediately throws `RuntimeException:

@@ -9,6 +9,7 @@ import {
     CalendarDays,
     FileText,
     HeartPulse,
+    KeyRound,
     LayoutDashboard,
     LayoutTemplate,
     LogOut,
@@ -44,6 +45,7 @@ function buildNav(user) {
         { label: 'Documentos legais', href: '/lgpd/documentos', icon: FileText, show: !!can['manage-legal'] },
         { label: 'Meus dados', href: '/lgpd/meus-dados', icon: ShieldCheck, show: has('paciente') },
         { label: 'Configurações', href: '/configuracoes', icon: Settings, show: !!can['manage-clinic-settings'] },
+        { label: 'Tokens de API', href: '/api-tokens', icon: KeyRound, show: true },
         { label: 'Tenants', href: '/plataforma/tenants', icon: Building2, show: !!can['platform.manage-tenants'] },
         { label: 'Notificações', href: '/notificacoes', icon: Bell, show: true },
     ].filter((item) => item.show);

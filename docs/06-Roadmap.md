@@ -442,6 +442,14 @@ instalado (sem dados), configuração de ambiente (MySQL, fila database).
   de convênios: faturamento ao convênio (guias/TISS), convênio por cobrança na UI (hoje herda do paciente).
 - Gateways de pagamento reais e PIX.
 - Aplicativo móvel.
-- API pública REST (o desacoplamento Actions/Services já feito desde a Fase 0 evita refatoração
-  significativa quando isso for priorizado).
+- ~~API pública REST~~ **(fundação concluída)** Autenticação por token Bearer (**Sanctum**, guard
+  `sanctum`; `personal_access_tokens` com `uuidMorphs` por causa da PK UUID do `User`). Tokens emitidos
+  pelo próprio usuário na área web autenticada (`/api-tokens`), **não** por endpoint de login — a API não
+  contorna o MFA obrigatório. Rotas centrais em `routes/api.php` (`/api/v1`, `auth:sanctum` + `throttle` +
+  `resolve.tenant`), reusando **as mesmas Actions/queries** dos controllers Inertia (o desacoplamento
+  Actions/Services↔HTTP desde a Fase 0 pagou aqui — a reserva via API chama a mesma `BookSessionAction`).
+  `ResolveTenant` passou a usar `$request->user()` (agnóstico de guard) para o tenant ser resolvido do dono
+  do token. Endpoints v1: `GET /me`, `GET /psychologists`, `GET /sessions`, `POST /sessions` (reserva),
+  `GET /charges`. Pendências: expandir a cobertura de endpoints por módulo, versionar respostas com
+  API Resources/paginação padronizada, documentação OpenAPI, e escopos de token (`abilities`).
 - SMS e WhatsApp como canais de notificação adicionais.

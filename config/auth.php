@@ -42,6 +42,13 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        // API pública (marco): autenticação por token Bearer (Sanctum). O driver
+        // `sanctum` é registrado pelo SanctumServiceProvider.
+        'sanctum' => [
+            'driver' => 'sanctum',
+            'provider' => 'users',
+        ],
     ],
 
     /*

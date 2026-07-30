@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 use Modules\Core\Traits\HasUuidPrimaryKey;
 use Modules\Security\Casts\EnvelopeEncrypted;
 use Modules\Settings\Models\Unit;
@@ -27,7 +28,7 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, HasRoles, HasUuidPrimaryKey, Notifiable;
+    use HasApiTokens, HasFactory, HasRoles, HasUuidPrimaryKey, Notifiable;
 
     protected static function newFactory(): UserFactory
     {
