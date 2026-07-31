@@ -39,6 +39,10 @@ class FinancialLedgerController extends Controller
                 'status' => $charge->status->value,
                 'installment_number' => $charge->installment_number,
                 'installment_total' => $charge->installment_total,
+                // Gateway (marco): link/PIX de pagamento, quando emitido.
+                'gateway_status' => $charge->gateway_status,
+                'payment_url' => $charge->payment_url,
+                'pix_payload' => $charge->pix_payload,
                 'payments' => $charge->payments->map(fn (Payment $payment) => [
                     'id' => $payment->id,
                     'amount' => (float) $payment->amount,

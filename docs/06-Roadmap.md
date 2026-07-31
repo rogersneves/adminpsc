@@ -440,7 +440,19 @@ instalado (sem dados), configuração de ambiente (MySQL, fila database).
   `Modules\Payments\Contracts\InvoiceIssuerInterface`) sem implementação/binding — dependem de provedor
   contratado (Clicksign/D4Sign; Focus NFe/eNotas), mesmo padrão do `PaymentGatewayInterface`. Pendências
   de convênios: faturamento ao convênio (guias/TISS), convênio por cobrança na UI (hoje herda do paciente).
-- Gateways de pagamento reais e PIX.
+- ~~Gateways de pagamento reais e PIX~~ **(fundação concluída)** Camada provider-agnóstica sobre o
+  `PaymentGatewayInterface` (Fase 5, agora refatorado para ser charge-centric): driver ativo via
+  `config('payments.default')` resolvido pelo `PaymentGatewayManager`. **Driver `null` padrão** (sem
+  chamada externa — cobrança manual como antes) e **adapter de referência `AsaasGateway`** (BR: PIX,
+  boleto, cartão), com credenciais em `config/payments.php` (env). Fluxo: `RequestGatewayChargeAction`
+  cria a cobrança no provedor (link/PIX gravados na `FinancialCharge` — colunas novas `gateway`,
+  `gateway_charge_id`, `payment_url`, `pix_payload`), o cliente paga, o provedor chama o webhook público
+  `POST /webhooks/payments/{driver}` (isento de CSRF, verificado por `verifyWebhook`), e a
+  `HandleGatewayWebhookAction` concilia **de forma idempotente** reusando a `RecordPaymentAction` (Fase 5)
+  — logo dispara `PaymentWasRecorded` e Notifications/Audit reagem de graça. UI no Ledger: staff gera a
+  cobrança online (PIX/cartão/boleto) e todos veem o link/copia-e-cola. Pendências: credenciais por-tenant
+  cifradas (hoje nível plataforma/env), estorno via gateway (`refund`), split/repasse, e adapters de
+  outros provedores (Mercado Pago, Pagar.me) — cada um é um novo driver contra a mesma interface.
 - Aplicativo móvel.
 - ~~API pública REST~~ **(fundação concluída)** Autenticação por token Bearer (**Sanctum**, guard
   `sanctum`; `personal_access_tokens` com `uuidMorphs` por causa da PK UUID do `User`). Tokens emitidos

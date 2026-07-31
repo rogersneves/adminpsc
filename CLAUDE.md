@@ -437,6 +437,30 @@ requests (same middleware, both guards). v1 endpoints: `GET /me`, `GET /psycholo
 one test process, so a "revoked token now fails" test must call `$this->app['auth']->forgetGuards()`
 between the two HTTP calls to simulate separate real requests (`ApiV1Test`).
 
+**Payment gateways (marco, foundation done):** a provider-agnostic layer over `PaymentGatewayInterface`
+(the Fase-5 stub, **refactored to be charge-centric** — `createCharge(FinancialCharge, method)` +
+`verifyWebhook`/`parseWebhook`; the old `charge(Payment)/refund(Payment)` shape was wrong because the
+`Payment` only exists AFTER confirmation). The active driver comes from `config('payments.default')`
+resolved by `PaymentGatewayManager` (Laravel `Manager`), bound to the interface in
+`PaymentsServiceProvider`. **`NullGateway` is the default** (no external call — the charge just awaits
+manual `RecordPaymentAction`, i.e. the pre-marco behaviour, and it's the deterministic test driver);
+**`AsaasGateway` is the reference adapter** (BR: PIX/boleto/card, Laravel HTTP client, key from
+`config/payments.php`). Flow: `RequestGatewayChargeAction` creates the charge at the provider and stores
+`gateway`/`gateway_charge_id`/`payment_url`/`pix_payload` on `financial_charges` (new columns); the
+customer pays; the provider hits the **public webhook `POST /webhooks/payments/{driver}`** (CSRF-exempt
+via `validateCsrfTokens(except: ['webhooks/*'])` in `bootstrap/app.php`, origin checked by the driver's
+`verifyWebhook`, throttled); `HandleGatewayWebhookAction` reconciles. **Two things that matter in the
+webhook action:** it runs in **guest context** (no session → no `CurrentTenant`), so it finds the charge
+with `withoutTenantScope()` and then **`CurrentTenant::set($charge->tenant)`** before calling
+`RecordPaymentAction` (whose `lockForUpdate` query is tenant-scoped); and it's **idempotent** — Asaas
+sends `PAYMENT_RECEIVED` then `PAYMENT_CONFIRMED`, so it dedups by `Payment.gateway_reference`
+(= provider payment id) before recording. Because reconciliation reuses `RecordPaymentAction`, it
+dispatches `PaymentWasRecorded` and Notifications/Audit fire for free (Fases 7/9). Adding a provider =
+add a `create{X}Driver()` to the manager + a driver class; per-tenant encrypted credentials and gateway
+`refund` are documented deferrals. Testing: drive the Null path directly; fake the Asaas HTTP with
+`Http::fake` (assert request shape) + `Http::assertSent`; the webhook idempotency test posts the same
+payload twice and asserts one `Payment` (`PaymentGatewayTest`).
+
 **Frontend:** Inertia pages live in `resources/js/Pages` (root) or `Modules/{Name}/resources/js/Pages`
 (per module). shadcn/ui components are copied into `resources/js/components/ui` (lowercase, per the
 shadcn CLI convention — see `components.json`) and customized directly, not installed as a runtime

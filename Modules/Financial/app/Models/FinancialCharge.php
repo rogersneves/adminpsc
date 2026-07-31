@@ -32,6 +32,11 @@ class FinancialCharge extends Model
         'installment_total',
         'due_soon_reminder_sent_at',
         'overdue_reminder_sent_at',
+        'gateway',
+        'gateway_charge_id',
+        'gateway_status',
+        'payment_url',
+        'pix_payload',
     ];
 
     public function patient()

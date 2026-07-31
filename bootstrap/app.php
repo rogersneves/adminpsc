@@ -26,6 +26,10 @@ return Application::configure(basePath: dirname(__DIR__))
             SecurityHeaders::class,
         ]);
 
+        // Webhooks de gateway de pagamento (marco): o provedor não envia CSRF token.
+        // A autenticidade é verificada pelo driver (verifyWebhook), não por CSRF.
+        $middleware->validateCsrfTokens(except: ['webhooks/*']);
+
         $middleware->alias([
             'resolve.tenant' => ResolveTenant::class,
         ]);

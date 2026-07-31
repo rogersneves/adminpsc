@@ -2,11 +2,26 @@
 
 namespace Modules\Payments\Providers;
 
-use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
+use Modules\Payments\Contracts\PaymentGatewayInterface;
+use Modules\Payments\Gateways\PaymentGatewayManager;
+use Nwidart\Modules\Support\ModuleServiceProvider;
 
 class PaymentsServiceProvider extends ModuleServiceProvider
 {
+    public function register(): void
+    {
+        parent::register();
+
+        // Gateway de pagamento (marco): o driver ativo (config payments.default) é
+        // resolvido pelo Manager; quem depende de PaymentGatewayInterface recebe ele.
+        $this->app->singleton(PaymentGatewayManager::class);
+        $this->app->bind(
+            PaymentGatewayInterface::class,
+            fn ($app) => $app->make(PaymentGatewayManager::class)->driver(),
+        );
+    }
+
     /**
      * The name of the module.
      */
@@ -36,8 +51,8 @@ class PaymentsServiceProvider extends ModuleServiceProvider
 
     /**
      * Define module schedules.
-     * 
-     * @param $schedule
+     *
+     * @param  $schedule
      */
     // protected function configureSchedules(Schedule $schedule): void
     // {

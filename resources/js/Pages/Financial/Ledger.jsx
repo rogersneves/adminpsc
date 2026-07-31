@@ -189,6 +189,35 @@ function RecordPaymentForm({ charge }) {
     );
 }
 
+function GatewayChargeForm({ charge }) {
+    const { data, setData, post, processing } = useForm({ method: 'pix' });
+
+    const submit = (e) => {
+        e.preventDefault();
+        post(`/financeiro/cobrancas/${charge.id}/gateway`, { preserveScroll: true });
+    };
+
+    return (
+        <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col text-xs font-medium">
+                Cobrar via gateway
+                <select
+                    value={data.method}
+                    onChange={(e) => setData('method', e.target.value)}
+                    className="mt-1 h-8 rounded-md border border-input bg-transparent px-2 text-sm"
+                >
+                    <option value="pix">PIX</option>
+                    <option value="cartao">Cartão</option>
+                    <option value="transferencia">Boleto</option>
+                </select>
+            </label>
+            <Button type="submit" variant="outline" size="sm" disabled={processing}>
+                Gerar cobrança online
+            </Button>
+        </form>
+    );
+}
+
 function ChargeCard({ charge, canManage }) {
     function cancelCharge() {
         router.delete(`/financeiro/cobrancas/${charge.id}`, { preserveScroll: true });
@@ -251,6 +280,27 @@ function ChargeCard({ charge, canManage }) {
                             </div>
                         ))}
                     </div>
+                )}
+
+                {(charge.payment_url || charge.pix_payload) && (
+                    <div className="flex flex-col gap-1 rounded-md border border-info/30 bg-info/10 p-2">
+                        <strong>Pagamento online</strong>
+                        {charge.payment_url && (
+                            <a href={charge.payment_url} target="_blank" rel="noreferrer" className="text-primary underline">
+                                Abrir link de pagamento
+                            </a>
+                        )}
+                        {charge.pix_payload && (
+                            <div className="flex flex-col gap-1">
+                                <span className="text-muted-foreground">PIX copia e cola:</span>
+                                <code className="block break-all rounded bg-card p-2 text-xs">{charge.pix_payload}</code>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {canManage && charge.status !== 'pago' && charge.status !== 'cancelado' && (
+                    <GatewayChargeForm charge={charge} />
                 )}
 
                 {canManage && charge.status !== 'pago' && charge.status !== 'cancelado' && (
